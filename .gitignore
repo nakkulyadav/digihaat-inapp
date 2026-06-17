@@ -1,0 +1,36 @@
+# ─── Dependencies ─────────────────────────────────────────────────────────────
+node_modules/
+
+# ─── Build output ─────────────────────────────────────────────────────────────
+dist/
+dist-ssr/
+
+# ─── Environment — NEVER COMMIT REAL CREDENTIALS ─────────────────────────────
+.env
+.env.local
+.env.*.local
+.env.example
+
+# ─── Vercel CLI cache ─────────────────────────────────────────────────────────
+.vercel/
+
+# ─── Claude Code session files ────────────────────────────────────────────────
+.claude/
+CLAUDE.md
+DESIGN.md
+PLAN.md
+REVIEW_LOG.md
+
+# ─── OS junk ──────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ─── Editor / IDE ─────────────────────────────────────────────────────────────
+*.local
+.vscode/
+.idea/
+
+# ─── Logs ─────────────────────────────────────────────────────────────────────
+*.log
+npm-debug.log*
