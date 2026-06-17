@@ -26,3 +26,8 @@ export const CATALOGUE_ENDPOINT = "";
 // from storage.googleapis.com to avoid canvas taint on export.
 // Defaults to /api/proxy-image (same-origin on Vercel).
 export const IMAGE_PROXY_ENDPOINT = import.meta.env.VITE_IMAGE_PROXY_ENDPOINT || "/api/proxy-image";
+
+// Base URL for the Vercel serverless function that fetches the provider logo URL
+// from Digihaat's analytics API server-side (avoids CORS block on prod.digihaat.in).
+// Defaults to /api/provider-logo (same-origin on Vercel).
+export const PROVIDER_LOGO_ENDPOINT = import.meta.env.VITE_PROVIDER_LOGO_ENDPOINT || "/api/provider-logo";

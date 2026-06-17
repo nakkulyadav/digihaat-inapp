@@ -1,18 +1,16 @@
-import { DATA_MODE, CATALOGUE_ENDPOINT } from "../config/constants";
+import { DATA_MODE, CATALOGUE_ENDPOINT, PROVIDER_LOGO_ENDPOINT } from "../config/constants";
 
-const ANALYTICS_BASE = "https://prod.digihaat.in/analyticsDashboard/catalog/search";
-
-// Fetches the provider/brand logo URL from Digihaat's analytics API.
-// Returns the first image URL from provider_details, or null on any failure.
+// Fetches the provider/brand logo URL via the Vercel serverless proxy,
+// which calls prod.digihaat.in server-side to avoid the browser CORS block.
+// Returns the logo URL string, or null on any failure.
 export async function fetchProviderLogo(bppId, domain, providerLocalId) {
   if (!bppId || !domain || !providerLocalId) return null;
   try {
-    const providerUniqueId = `${bppId}_${domain}_${providerLocalId}`;
-    const qs = new URLSearchParams({ page: "1", pageSize: "1", provider_unique_id: providerUniqueId });
-    const res = await fetch(`${ANALYTICS_BASE}?${qs}`);
+    const qs = new URLSearchParams({ bpp_id: bppId, domain, provider_id: providerLocalId });
+    const res = await fetch(`${PROVIDER_LOGO_ENDPOINT}?${qs}`);
     if (!res.ok) return null;
     const json = await res.json();
-    return json?.data?.[0]?.raw_source?.provider_details?.descriptor?.images?.[0] || null;
+    return json?.logoUrl || null;
   } catch {
     return null;
   }
