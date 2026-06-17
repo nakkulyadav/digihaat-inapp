@@ -404,15 +404,29 @@ export default function BannerTool() {
                             <Field label="Quantity (e.g. 75 ml)" value={ov.content ?? data?.fields.quantity ?? ""} onChange={(v) => setOv(key, { content: v })} />
                           )}
                           {key === "brand_logo" && (
-                            <div style={{ fontSize: 11, color: logoErr ? T.error : T.sub }}>
-                              {logoImg
-                                ? "Brand logo loaded."
-                                : logoErr
-                                  ? logoErr
-                                  : data?.fields.brand_logo_url
-                                    ? "Loading brand logo…"
-                                    : "No logo found — upload manually."}
-                            </div>
+                            <>
+                              <div style={{ fontSize: 11, color: logoErr ? T.error : T.sub }}>
+                                {logoImg
+                                  ? "Brand logo loaded."
+                                  : logoErr
+                                    ? logoErr
+                                    : data?.fields.brand_logo_url
+                                      ? "Loading brand logo…"
+                                      : "No logo found — upload manually."}
+                              </div>
+                              <div style={{ marginTop: 8 }}>
+                                <div style={{ fontSize: 11, color: T.sub, marginBottom: 4 }}>Logo size</div>
+                                <input
+                                  type="range"
+                                  min={0}
+                                  max={6}
+                                  step={1}
+                                  value={6 - (ov.pad ?? base.pad)}
+                                  onChange={(e) => setOv(key, { pad: 6 - Number(e.target.value) })}
+                                  style={{ width: "100%" }}
+                                />
+                              </div>
+                            </>
                           )}
 
                           {/* position adjust */}
