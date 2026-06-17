@@ -419,7 +419,7 @@ export default function BannerTool() {
                                 <input
                                   type="range"
                                   min={0}
-                                  max={6}
+                                  max={24}
                                   step={1}
                                   value={6 - (ov.pad ?? base.pad)}
                                   onChange={(e) => setOv(key, { pad: 6 - Number(e.target.value) })}
