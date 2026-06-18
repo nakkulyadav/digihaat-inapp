@@ -39,27 +39,22 @@ export default async function handler(req, res) {
     return;
   }
 
-  // Resolve hostname to IPs and block private/internal ranges (SSRF protection)
-  let ipv4 = [];
-  let ipv6 = [];
+  // Use dns.lookup (OS native resolver) so CNAME chains and all DNS setups work
+  // correctly — this is the same resolution path the fetch() call would use.
+  let addresses;
   try {
-    ipv4 = await dnsPromises.resolve4(parsed.hostname);
+    addresses = await dnsPromises.lookup(parsed.hostname, { all: true });
   } catch {
-    // hostname may be IPv6-only or unresolvable on IPv4
-  }
-  try {
-    ipv6 = await dnsPromises.resolve6(parsed.hostname);
-  } catch {
-    // hostname may be IPv4-only
-  }
-
-  if (ipv4.length === 0 && ipv6.length === 0) {
     res.status(502).json({ error: "hostname could not be resolved" });
     return;
   }
 
-  const allIps = [...ipv4, ...ipv6];
-  if (allIps.some(isPrivateIp)) {
+  if (!addresses || addresses.length === 0) {
+    res.status(502).json({ error: "hostname could not be resolved" });
+    return;
+  }
+
+  if (addresses.some(({ address }) => isPrivateIp(address))) {
     res.status(403).json({ error: "private or internal addresses are not allowed" });
     return;
   }
