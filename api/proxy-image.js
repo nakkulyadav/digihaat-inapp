@@ -7,7 +7,7 @@ const PRIVATE_IP_RE = [
   /^192\.168\./,
   /^172\.(1[6-9]|2[0-9]|3[01])\./,
   /^169\.254\./,
-  /^0\.0\.0\.0/,
+  /^0\./,
   /^::1$/,
   /^fc[0-9a-f]{2}:/i,
   /^fd[0-9a-f]{2}:/i,
@@ -61,7 +61,7 @@ export default async function handler(req, res) {
 
   let upstream;
   try {
-    upstream = await fetch(url);
+    upstream = await fetch(url, { signal: AbortSignal.timeout(8000) });
   } catch {
     res.status(502).json({ error: "upstream unreachable" });
     return;
@@ -73,6 +73,10 @@ export default async function handler(req, res) {
   }
 
   const contentType = upstream.headers.get("content-type") || "image/jpeg";
+  if (!contentType.startsWith("image/")) {
+    res.status(502).json({ error: "upstream did not return an image" });
+    return;
+  }
   res.setHeader("Content-Type", contentType);
   res.setHeader("Cache-Control", "public, max-age=86400");
   res.setHeader("Access-Control-Allow-Origin", "*");

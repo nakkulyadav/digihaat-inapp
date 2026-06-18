@@ -16,10 +16,7 @@ dist-ssr/
 
 # ─── Claude Code session files ────────────────────────────────────────────────
 .claude/
-CLAUDE.md
-DESIGN.md
-PLAN.md
-REVIEW_LOG.md
+/docs
 
 # ─── OS junk ──────────────────────────────────────────────────────────────────
 .DS_Store

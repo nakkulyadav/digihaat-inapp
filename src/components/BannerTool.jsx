@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
 
 import { CATEGORIES, ELEMENTS_BY_CATEGORY } from "../config/categories";
 import BANNER_SKU_CONFIG from "../config/elements/banner_sku.json";
@@ -8,7 +9,7 @@ import { parseProductUrl } from "../lib/url";
 import { fetchCatalogue } from "../lib/catalogue";
 import { assembleProductData } from "../lib/assemble";
 import { drawBanner } from "../lib/render";
-import { T, mono, h2, linkBtn, btnPrimary, btnExport, btnDisabled, warnBox } from "./tokens";
+import { T, mono, h1, h2, btnPrimary, btnOutlined, warnBox } from "./tokens";
 import Toggle from "./atoms/Toggle";
 import Field from "./atoms/Field";
 import NumField from "./atoms/NumField";
@@ -16,18 +17,267 @@ import UploadBtn from "./atoms/UploadBtn";
 import EmptyCard from "./atoms/EmptyCard";
 import Chevron from "./atoms/Chevron";
 
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+function HoverBtn({ children, style, hoverStyle, onClick }) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <button onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{ background: "none", border: "none", padding: 0, cursor: "pointer", ...style, ...(hovered ? hoverStyle : {}) }}>
+      {children}
+    </button>
+  );
+}
+
+function SidebarBtn({ label, active, showSoon, soonColor, onClick }) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <button onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
+        width: "100%", textAlign: "left", marginBottom: 2, padding: "9px 12px", borderRadius: 7,
+        border: "none", cursor: "pointer",
+        fontFamily: "Jost, sans-serif", fontWeight: 700, fontSize: 13,
+        letterSpacing: "0.04em", textTransform: "uppercase",
+        background: active ? T.accent : hovered ? "rgba(255,255,255,0.06)" : "transparent",
+        color: active ? "#FFFFFF" : "#D6D5DA",
+        transition: "background 100ms ease-out",
+      }}>
+      <span>{label}</span>
+      {showSoon && (
+        <span style={{ fontFamily: "Inter, system-ui, sans-serif", fontWeight: 600, fontSize: 9, letterSpacing: 0, textTransform: "lowercase", color: soonColor ?? T.disabled }}>
+          soon
+        </span>
+      )}
+    </button>
+  );
+}
+
+function ElementCard({ element, onClick }) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <button onClick={onClick} disabled={!element.enabled}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        display: "flex", flexDirection: "column", justifyContent: "space-between",
+        gap: 24, minHeight: 108, textAlign: "left", padding: 16,
+        border: `1px solid ${T.line}`, borderRadius: 8,
+        background: element.enabled ? T.surface : T.work,
+        cursor: element.enabled ? "pointer" : "not-allowed",
+        transform: hovered && element.enabled ? "translateY(-2px)" : "none",
+        boxShadow: hovered && element.enabled ? `0 4px 12px rgba(0,0,0,0.50), ${T.orangeGlow}` : "none",
+        transition: "transform 150ms ease-out, box-shadow 150ms ease-out",
+      }}>
+      <span style={{ fontFamily: "Jost, sans-serif", fontWeight: 700, fontSize: 16, color: element.enabled ? T.text : T.sub }}>
+        {element.label}
+      </span>
+      <span style={{
+        alignSelf: "flex-start", fontFamily: "Inter, system-ui, sans-serif", fontWeight: 600, fontSize: 11,
+        padding: "3px 8px", borderRadius: 4,
+        background: element.enabled ? "rgba(29,191,18,0.12)" : T.work,
+        color: element.enabled ? T.success : T.disabled,
+      }}>
+        {element.enabled ? "Ready" : "Coming soon"}
+      </span>
+    </button>
+  );
+}
+
+function AdjustBtn({ label, onClick, style: extraStyle }) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <button onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        background: "none", border: "none", padding: 0, cursor: "pointer",
+        fontFamily: "Inter, system-ui, sans-serif", fontWeight: 600, fontSize: 11,
+        color: hovered ? T.accent : T.text,
+        ...extraStyle,
+      }}>
+      {label}
+    </button>
+  );
+}
+
+function PropertiesPanel({ inline, open, onClose, elList, overrides, data, logoImg, logoErr, openAdj, cfg, onToggleEl, onFieldChange, onToggleAdj, onReset }) {
+  if (!inline && !open) return null;
+
+  const panelStyle = inline
+    ? { width: 320, flexShrink: 0, borderLeft: `1px solid ${T.line}`, background: T.surface, overflow: "auto", padding: 16 }
+    : {
+        position: "fixed", left: 0, right: 0, bottom: 0, maxHeight: "82vh",
+        background: T.surface, overflow: "auto", padding: "16px 16px 24px",
+        borderTop: `1px solid ${T.line}`, borderRadius: "16px 16px 0 0",
+        boxShadow: "0 -8px 32px rgba(0,0,0,0.60)", zIndex: 50,
+      };
+
+  return (
+    <div style={panelStyle}>
+      <div style={{ fontFamily: "Jost, sans-serif", fontWeight: 700, fontSize: 16, color: T.text }}>Elements</div>
+      <div style={{ fontFamily: "Inter, system-ui, sans-serif", fontWeight: 400, fontSize: 11, color: T.sub, marginTop: 4, marginBottom: 14 }}>
+        Toggle, edit text, adjust position. Changes preview live and are session-only.
+      </div>
+
+      {elList.map(([key, base]) => {
+        const ov = overrides[key] || {};
+        const isOn = ov.visible !== undefined ? ov.visible : base.visible;
+        return (
+          <div key={key} style={{ border: `1px solid ${T.line}`, borderRadius: 8, marginBottom: 10, overflow: "hidden" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", background: T.surface2 }}>
+              <span style={{ fontFamily: "Jost, sans-serif", fontWeight: 700, fontSize: 12.5, color: T.text, flex: 1 }}>{base.label}</span>
+              {base.toggleable && <Toggle on={isOn} onChange={(v) => onToggleEl(key, v)} />}
+            </div>
+            {isOn && (
+              <div style={{ padding: "10px 12px" }}>
+                {key === "headline" && (
+                  <Field label="Text" value={ov.content ?? data?.fields.headline ?? ""} onChange={(v) => onFieldChange(key, { content: v })} />
+                )}
+                {key === "price" && (<>
+                  <Field label="Selling price" value={ov.selling ?? data?.fields.selling_display ?? ""} onChange={(v) => onFieldChange(key, { selling: v })} />
+                  <Field label="MRP (strikethrough)" value={ov.mrp ?? data?.fields.mrp ?? ""} onChange={(v) => onFieldChange(key, { mrp: v })} mono />
+                </>)}
+                {key === "cta_button" && (
+                  <Field label="Button text" value={ov.content ?? base.label_text} onChange={(v) => onFieldChange(key, { content: v })} />
+                )}
+                {key === "tnc" && (
+                  <Field label="Text" value={ov.content ?? base.text} onChange={(v) => onFieldChange(key, { content: v })} />
+                )}
+                {key === "offer_badge" && (
+                  <Field label="Badge text" value={ov.content ?? data?.fields.offer ?? ""} onChange={(v) => onFieldChange(key, { content: v })} />
+                )}
+                {key === "quantity_badge" && (
+                  <Field label="Quantity (e.g. 75 ml)" value={ov.content ?? data?.fields.quantity ?? ""} onChange={(v) => onFieldChange(key, { content: v })} />
+                )}
+                {key === "brand_logo" && (
+                  <>
+                    <div style={{ fontSize: 11, color: logoErr ? T.error : T.sub }}>
+                      {logoImg
+                        ? "Brand logo loaded."
+                        : logoErr
+                          ? logoErr
+                          : data?.fields.brand_logo_url
+                            ? "Loading brand logo…"
+                            : "No logo found — upload manually."}
+                    </div>
+                    <div style={{ marginTop: 8 }}>
+                      <div style={{ fontSize: 11, color: T.sub, marginBottom: 4 }}>Logo size</div>
+                      <input type="range" min={0} max={24} step={1}
+                        value={6 - (ov.pad ?? base.pad)}
+                        onChange={(e) => onFieldChange(key, { pad: 6 - Number(e.target.value) })}
+                        style={{ width: "100%" }} />
+                    </div>
+                  </>
+                )}
+
+                <AdjustBtn
+                  label={openAdj[key] ? "Hide position" : "Adjust position"}
+                  onClick={() => onToggleAdj(key)}
+                  style={{ marginTop: 8 }}
+                />
+                {openAdj[key] && (
+                  <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                    {("cx" in base) ? (<>
+                      <NumField label="cx" value={ov.cx ?? base.cx} onChange={(v) => onFieldChange(key, { cx: v })} />
+                      <NumField label="cy" value={ov.cy ?? base.cy} onChange={(v) => onFieldChange(key, { cy: v })} />
+                      <NumField label="r" value={ov.r ?? base.r} onChange={(v) => onFieldChange(key, { r: v })} />
+                    </>) : (<>
+                      <NumField label="x" value={ov.x ?? base.x} onChange={(v) => onFieldChange(key, { x: v })} />
+                      <NumField label="y" value={ov.y ?? base.y} onChange={(v) => onFieldChange(key, { y: v })} />
+                    </>)}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      <AdjustBtn label="Reset all edits" onClick={onReset} style={{ marginTop: 4 }} />
+    </div>
+  );
+}
+
+function SettingsScreen({ cfg }) {
+  const [open, setOpen] = useState({});
+  const elEntries = Object.entries(cfg.elements).sort((a, b) => a[1].order - b[1].order);
+
+  return (
+    <div style={{ maxWidth: 880, display: "flex", flexDirection: "column", gap: 32 }}>
+
+      <section>
+        <h2 style={{ fontFamily: "Jost, sans-serif", fontWeight: 700, fontSize: 20, lineHeight: 1.1, letterSpacing: "-0.01em", color: T.text }}>Canvas</h2>
+        <div style={{ marginTop: 16, display: "flex", gap: 16, flexWrap: "wrap" }}>
+          {[["Width (px)", cfg.canvas.wLogical], ["Height (px)", cfg.canvas.hLogical], ["Export scale (×)", cfg.canvas.scale]].map(([label, val]) => (
+            <div key={label} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <span style={{ fontFamily: "Inter, system-ui, sans-serif", fontWeight: 500, fontSize: 12, color: T.sub }}>{label}</span>
+              <input readOnly value={val}
+                style={{ width: 140, fontFamily: mono, fontSize: 13, color: T.text, background: T.surface, borderRadius: 8, padding: "8px 12px", border: "none", outline: "none" }} />
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section>
+        <h2 style={{ fontFamily: "Jost, sans-serif", fontWeight: 700, fontSize: 20, lineHeight: 1.1, letterSpacing: "-0.01em", color: T.text }}>Elements</h2>
+        <div style={{ marginTop: 16, maxWidth: 560 }}>
+          {elEntries.map(([key, el]) => {
+            const isOpen = !!open[key];
+            const fields = Object.entries(el).filter(([k]) =>
+              !["label", "order", "visible", "toggleable", "fontFamily"].includes(k)
+            );
+            return (
+              <div key={key} style={{ border: `1px solid ${T.line}`, borderRadius: 8, overflow: "hidden", marginBottom: 8 }}>
+                <button onClick={() => setOpen((o) => ({ ...o, [key]: !o[key] }))}
+                  style={{
+                    width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
+                    padding: "12px 14px", background: T.surface2, border: "none", cursor: "pointer",
+                  }}>
+                  <span style={{ fontFamily: "Jost, sans-serif", fontWeight: 700, fontSize: 13, color: T.text }}>{el.label}</span>
+                  <span style={{ fontSize: 16, color: T.sub, display: "inline-block", transform: isOpen ? "rotate(90deg)" : "none", transition: "transform 150ms ease-out" }}>›</span>
+                </button>
+                {isOpen && (
+                  <div style={{ padding: "12px 14px", borderTop: `1px solid ${T.line}`, display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(120px,1fr))", gap: 12 }}>
+                    {fields.map(([k, v]) => (
+                      <div key={k} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                        <span style={{ fontFamily: mono, fontSize: 11, color: T.sub }}>{k}</span>
+                        <input readOnly value={String(v)}
+                          style={{ width: "100%", fontFamily: mono, fontSize: 12, color: T.text, background: T.surface, borderRadius: 8, padding: "8px 10px", border: "none", outline: "none" }} />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+// ─── Main component ───────────────────────────────────────────────────────────
+
 export default function BannerTool() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
+
+  // ── data state ───────────────────────────────────────────────────────────────
   const [fontReady, setFontReady] = useState(false);
-  const [catId, setCatId] = useState("grocery");
-  const [elId, setElId] = useState(null);
   const [allRows, setAllRows] = useState([]);
   const [loadingRows, setLoadingRows] = useState(false);
   const [sheetSource, setSheetSource] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("Pending");
 
-  const [active, setActive] = useState(null); // selected product row
-  const [data, setData] = useState(null);     // assembled product data
+  const [active, setActive] = useState(null);
+  const [data, setData] = useState(null);
   const [buildErr, setBuildErr] = useState("");
   const [overrides, setOverrides] = useState({});
   const [bgImg, setBgImg] = useState(null);
@@ -38,20 +288,48 @@ export default function BannerTool() {
   const [warnings, setWarnings] = useState([]);
   const [openAdj, setOpenAdj] = useState({});
 
+  // ── responsive state ─────────────────────────────────────────────────────────
+  const [vw, setVw] = useState(typeof window !== "undefined" ? window.innerWidth : 1440);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
   const canvasRef = useRef(null);
+
+  // ── nav — derived from URL ────────────────────────────────────────────────────
+  const catId = searchParams.get("cat") ?? "grocery";
+  const elId = searchParams.get("el") ?? null;
+  const pathname = location.pathname;
+  const soonCat = pathname.startsWith("/soon/") ? decodeURIComponent(pathname.slice(6)) : null;
+  const showSettings = pathname === "/settings";
 
   const category = CATEGORIES.find((c) => c.id === catId);
   const elements = ELEMENTS_BY_CATEGORY[catId] || [];
   const element = elements.find((e) => e.id === elId) || null;
 
-  /* wait for Inter (declared in inter.css) to be ready before drawing */
+  const isMobile = vw < 768;
+  const panelInline = vw >= 1024;
+  const screen = showSettings ? "settings"
+    : soonCat ? "soon"
+    : pathname === "/workspace" ? "workspace"
+    : elId ? "list"
+    : "picker";
+
+  // ── effects ──────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (pathname === "/workspace" && !active) navigate("/", { replace: true });
+  }, [pathname, active, navigate]);
+
   useEffect(() => {
     let cancelled = false;
     document.fonts.ready.then(() => { if (!cancelled) setFontReady(true); });
     return () => { cancelled = true; };
   }, []);
 
-  /* fetch full sheet once on mount; partition in memory by category + element */
+  useEffect(() => {
+    const handler = () => setVw(window.innerWidth);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     setLoadingRows(true);
@@ -92,10 +370,11 @@ export default function BannerTool() {
     });
   }, [rows, statusFilter, search]);
 
-  /* open a product into the workspace */
   const openProduct = useCallback(async (row) => {
     setActive(row); setApproved(false); setOverrides({}); setBgImg(null);
     setLogoImg(null); setLogoErr(null); setData(null); setBuildErr(""); setOpenAdj({});
+    setDrawerOpen(false);
+    navigate(`/workspace?cat=${catId}&el=${elId}`);
     try {
       const parsed = parseProductUrl(row.URL);
       const cat = await fetchCatalogue(parsed, row);
@@ -103,9 +382,8 @@ export default function BannerTool() {
     } catch (e) {
       setBuildErr("Could not assemble product data: " + e.message);
     }
-  }, []);
+  }, [catId, elId, navigate]);
 
-  /* draw whenever inputs change */
   useEffect(() => {
     if (!data || !canvasRef.current) return;
     const C = cfg.canvas;
@@ -117,7 +395,6 @@ export default function BannerTool() {
     setWarnings(w);
   }, [data, overrides, bgImg, logoImg, cfg, fontReady]);
 
-  /* auto-load brand logo through proxy when data assembles with a logo URL */
   useEffect(() => {
     const url = data?.fields.brand_logo_url;
     if (!url) return;
@@ -136,6 +413,7 @@ export default function BannerTool() {
     return () => { cancelled = true; };
   }, [data?.fields.brand_logo_url]);
 
+  // ── helpers ──────────────────────────────────────────────────────────────────
   const setOv = (key, patch) =>
     setOverrides((o) => ({ ...o, [key]: { ...(o[key] || {}), ...patch } }));
 
@@ -160,306 +438,419 @@ export default function BannerTool() {
     a.href = url; a.download = `banner_sku_grocery_${name}.${type}`; a.click();
   };
 
+  const exportConfig = () => {
+    const blob = new Blob([JSON.stringify(cfg, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = "banner_sku.json"; a.click();
+  };
+
+  const goCategory = () => navigate(`/?cat=${catId}`);
+  const goElement = () => navigate(-1);
+  const openSettings = () => navigate("/settings");
+
   const elList = useMemo(() =>
     Object.entries(cfg.elements).sort((a, b) => a[1].order - b[1].order), [cfg]);
 
-  /* ──────────────────────────────── render ──────────────────────────────────── */
+  // ── render ────────────────────────────────────────────────────────────────────
   return (
     <div style={{
-      display: "flex", height: "100vh", minHeight: 640, fontFamily: "Inter, system-ui, sans-serif",
+      display: "flex", flexDirection: isMobile ? "column" : "row",
+      height: "100vh", minHeight: 560, fontFamily: "Inter, system-ui, sans-serif",
       color: T.text, background: T.work, fontSize: 14, overflow: "hidden",
     }}>
-      {/* sidebar */}
-      <aside style={{
-        width: 220, background: T.ink, color: "#EDEDED", flexShrink: 0,
-        display: "flex", flexDirection: "column", padding: "16px 0",
-      }}>
-        <div style={{ padding: "0 16px 16px", borderBottom: "1px solid #2A2A2F" }}>
-          <div style={{ fontSize: 14, fontWeight: 700, fontFamily: "Jost, sans-serif", letterSpacing: ".04em" }}>Creative Studio</div>
-          <div style={{ fontSize: 12, color: "#707072", marginTop: 4 }}>In-app banner automation</div>
-        </div>
-        <div style={{ padding: "12px 12px 4px", fontSize: 12, fontFamily: "Jost, sans-serif", letterSpacing: ".04em", color: "#707072", textTransform: "uppercase" }}>Categories</div>
-        {CATEGORIES.map((c) => {
-          const on = c.id === catId;
-          return (
-            <button key={c.id} disabled={!c.enabled}
-              onClick={() => { if (c.enabled) { setCatId(c.id); setElId(null); setActive(null); } }}
-              style={{
-                textAlign: "left", margin: "2px 8px", padding: "8px 12px", borderRadius: 24,
-                border: "none", cursor: c.enabled ? "pointer" : "not-allowed",
-                background: on ? T.accent : "transparent",
-                color: c.enabled ? (on ? "#fff" : "#D6D5DA") : "#56555B",
-                fontSize: 13, fontWeight: 700, display: "flex", fontFamily: "Jost, sans-serif",
-                justifyContent: "space-between", alignItems: "center",
-              }}>
-              {c.label}
-              {!c.enabled && <span style={{ fontSize: 11, color: "#56555B" }}>soon</span>}
-            </button>
-          );
-        })}
-        <div style={{ marginTop: "auto", padding: "12px 16px", fontSize: 10, color: "#56555B", fontFamily: "JetBrains Mono, monospace", borderTop: "1px solid #2A2A2F" }}>
-          Data mode: <span style={{ fontFamily: mono, color: DATA_MODE === "mock" ? T.warn : T.accent }}>{DATA_MODE}</span>
-        </div>
-      </aside>
 
-      {/* main */}
-      <main style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
-        {/* breadcrumb */}
-        <header style={{
-          height: 48, borderBottom: `1px solid ${T.line}`, background: "#fff",
-          display: "flex", alignItems: "center", padding: "0 16px", gap: 8, flexShrink: 0,
+      {/* ── sidebar (desktop only) ─────────────────────────────────────────────── */}
+      {!isMobile && (
+        <aside style={{
+          width: 208, background: T.ink, color: "#EDEDED", flexShrink: 0,
+          display: "flex", flexDirection: "column", height: "100%",
         }}>
-          <span style={{ fontWeight: 600 }}>{category?.label}</span>
-          {element && <><Chevron /><span style={{ color: T.sub }}>{element.label}</span></>}
-          {active && <><Chevron /><span style={{ color: T.sub }}>{active.Subheader || "Untitled"}</span></>}
-          <div style={{ marginLeft: "auto", fontSize: 11, color: T.disabled }}>
-            {active && (
-              <button onClick={() => { setActive(null); setData(null); }} style={linkBtn}>← Back to list</button>
+          <div style={{ padding: "16px", borderBottom: `1px solid ${T.line}` }}>
+            <div style={{ fontFamily: "Jost, sans-serif", fontWeight: 700, fontSize: 14, color: "#EDEDED", letterSpacing: "0.02em" }}>
+              Creative Studio
+            </div>
+            <div style={{ fontFamily: "Inter, system-ui, sans-serif", fontWeight: 400, fontSize: 10.5, color: T.sub, marginTop: 4 }}>
+              In-app banner automation
+            </div>
+          </div>
+
+          <div style={{ padding: "16px 16px 8px", fontFamily: "Inter, system-ui, sans-serif", fontWeight: 400, fontSize: 10, color: T.disabled, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+            Categories
+          </div>
+          <div style={{ padding: "0 8px" }}>
+            {CATEGORIES.map((c) => {
+              const isActive = c.id === catId && !showSettings && !soonCat;
+              return (
+                <SidebarBtn key={c.id}
+                  label={c.label}
+                  active={isActive}
+                  showSoon={!c.enabled}
+                  soonColor={isActive ? "rgba(255,255,255,0.75)" : T.disabled}
+                  onClick={() => {
+                    if (c.enabled) navigate(`/?cat=${c.id}`);
+                    else navigate(`/soon/${encodeURIComponent(c.label)}`);
+                  }}
+                />
+              );
+            })}
+          </div>
+
+          <div style={{ margin: "12px 12px 0", borderTop: `1px solid ${T.line}` }} />
+          <div style={{ padding: "8px 8px 0" }}>
+            <SidebarBtn label="Settings" active={showSettings} onClick={openSettings} />
+          </div>
+
+          <div style={{ marginTop: "auto", padding: "12px 16px", borderTop: `1px solid ${T.line}`, fontFamily: mono, fontSize: 10, color: T.disabled }}>
+            Data mode: <span style={{ color: DATA_MODE === "mock" ? T.warn : T.accent }}>{DATA_MODE}</span>
+          </div>
+        </aside>
+      )}
+
+      {/* ── main ──────────────────────────────────────────────────────────────── */}
+      <main style={{ flex: 1, minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+
+        {/* ── header ── */}
+        <header style={{
+          height: 48, flexShrink: 0, borderBottom: `1px solid ${T.line}`,
+          background: T.surface, display: "flex", alignItems: "center",
+          padding: "0 16px", gap: 8, zIndex: 10,
+        }}>
+          <HoverBtn
+            style={{ fontFamily: "Jost, sans-serif", fontWeight: 700, fontSize: 14, color: T.text }}
+            hoverStyle={{ color: T.accent }}
+            onClick={goCategory}>
+            {category?.label}
+          </HoverBtn>
+
+          {screen === "settings" && (
+            <><Chevron /><span style={{ fontFamily: "Jost, sans-serif", fontWeight: 700, fontSize: 14, color: T.sub }}>Settings</span></>
+          )}
+          {screen === "soon" && (
+            <><Chevron /><span style={{ fontFamily: "Jost, sans-serif", fontWeight: 700, fontSize: 14, color: T.sub }}>{soonCat}</span></>
+          )}
+          {(screen === "list" || screen === "workspace") && element && (<>
+            <Chevron />
+            <HoverBtn
+              style={{ fontFamily: "Jost, sans-serif", fontWeight: 700, fontSize: 14, color: T.sub }}
+              hoverStyle={{ color: T.accent }}
+              onClick={goElement}>
+              {element.label}
+            </HoverBtn>
+          </>)}
+          {screen === "workspace" && active && (<>
+            <Chevron />
+            <span style={{ fontFamily: "Jost, sans-serif", fontWeight: 700, fontSize: 14, color: T.sub, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 240 }}>
+              {active.Subheader || "Untitled"}
+            </span>
+          </>)}
+
+          <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 12 }}>
+            {screen === "list" && (
+              <span style={{ fontFamily: mono, fontSize: 11, color: T.sub }}>{sheetSource}</span>
             )}
+            {screen === "workspace" && (
+              <HoverBtn
+                style={{ fontFamily: "Inter, system-ui, sans-serif", fontWeight: 600, fontSize: 12, color: T.text }}
+                hoverStyle={{ color: T.accent }}
+                onClick={goElement}>
+                ← Back to list
+              </HoverBtn>
+            )}
+            {screen === "settings" && (<>
+              <HoverBtn
+                style={{ fontFamily: "Inter, system-ui, sans-serif", fontWeight: 600, fontSize: 12, color: T.text }}
+                hoverStyle={{ color: T.accent }}
+                onClick={exportConfig}>
+                Export config JSON
+              </HoverBtn>
+              <button disabled title="Editing not yet available" style={{
+                height: 32, padding: "0 18px", borderRadius: 30, border: "none",
+                background: T.surface2, color: T.disabled,
+                fontFamily: "Inter, system-ui, sans-serif", fontWeight: 500, fontSize: 12,
+                textTransform: "uppercase", letterSpacing: "0.02em",
+                cursor: "not-allowed", opacity: 0.4,
+              }}>Save changes</button>
+            </>)}
           </div>
         </header>
 
-        {/* body */}
-        <div style={{ flex: 1, overflow: "hidden", display: "flex", minHeight: 0 }}>
+        {/* ── body ── */}
+        <div style={{ flex: 1, minHeight: 0, position: "relative", background: T.work }}>
 
-          {/* ELEMENT PICKER (no element chosen) */}
-          {!element && (
-            <div style={{ padding: 24, overflow: "auto", width: "100%" }}>
-              <h2 style={h2}>Choose an element</h2>
-              <p style={{ color: T.sub, marginTop: 4, marginBottom: 24 }}>
+          {/* SCREEN: ELEMENT PICKER */}
+          {screen === "picker" && (
+            <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, overflow: "auto", padding: 32 }}>
+              <h1 style={h1}>Choose an element</h1>
+              <p style={{ marginTop: 8, fontFamily: "Inter, system-ui, sans-serif", fontWeight: 400, fontSize: 14, color: T.sub }}>
                 Pick which creative type you want to generate for {category?.label}.
               </p>
               {elements.length === 0 && (
-                <EmptyCard text={`No elements configured for ${category?.label} yet.`} />
+                <div style={{ marginTop: 24 }}>
+                  <EmptyCard text={`No elements configured for ${category?.label} yet.`} />
+                </div>
               )}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(220px,1fr))", gap: 12 }}>
+              <div style={{ marginTop: 24, display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(220px,1fr))", gap: 12, maxWidth: 1040 }}>
                 {elements.map((e) => (
-                  <button key={e.id} disabled={!e.enabled} onClick={() => e.enabled && setElId(e.id)}
-                    style={{
-                      textAlign: "left", padding: 16, borderRadius: 8, cursor: e.enabled ? "pointer" : "not-allowed",
-                      border: `1px solid ${e.enabled ? T.line : T.line}`,
-                      background: e.enabled ? "#fff" : "#F5F5F5",
-                    }}>
-                    <div style={{ fontWeight: 700, fontFamily: "Jost, sans-serif", color: e.enabled ? T.text : T.disabled }}>{e.label}</div>
-                    <div style={{ fontSize: 11, color: T.disabled, marginTop: 4 }}>
-                      {e.enabled ? "Ready" : "Coming soon"}
-                    </div>
-                  </button>
+                  <ElementCard key={e.id} element={e} onClick={() => e.enabled && navigate(`/list?cat=${catId}&el=${e.id}`)} />
                 ))}
               </div>
             </div>
           )}
 
-          {/* PRODUCT LIST (element chosen, no product open) */}
-          {element && !active && (
-            <div style={{ padding: 24, overflow: "auto", width: "100%" }}>
+          {/* SCREEN: PRODUCT LIST */}
+          {screen === "list" && (
+            <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, overflow: "auto", padding: 32 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
-                <h2 style={{ ...h2, margin: 0 }}>{element.label}</h2>
-                <span style={{ fontSize: 11, color: T.disabled, fontFamily: mono }}>{sheetSource}</span>
-                <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
-                  <input placeholder="Search products…" value={search} onChange={(e) => setSearch(e.target.value)}
-                    style={{ padding: "12px 14px", fontSize: 14, background: "#F5F5F5", border: "none", borderRadius: 8, width: 200, outline: "none" }} />
+                <h2 style={h2}>{element.label}</h2>
+                <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+                  <input
+                    placeholder="Search products…"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    onFocus={(e) => { e.currentTarget.style.boxShadow = T.orangeGlow; }}
+                    onBlur={(e) => { e.currentTarget.style.boxShadow = "none"; }}
+                    style={{ width: 200, fontFamily: "Inter, system-ui, sans-serif", fontWeight: 400, fontSize: 13, color: T.text, background: T.surface, borderRadius: 8, padding: "8px 12px", border: `1px solid ${T.line}`, outline: "none" }}
+                  />
                   <div style={{ display: "flex", border: `1px solid ${T.line}`, borderRadius: 8, overflow: "hidden" }}>
                     {["Pending", "Done", "All"].map((s) => (
                       <button key={s} onClick={() => setStatusFilter(s)} style={{
-                        padding: "8px 12px", fontSize: 11, border: "none", cursor: "pointer",
-                        background: statusFilter === s ? T.accent : "#fff",
-                        color: statusFilter === s ? "#fff" : T.sub, fontWeight: statusFilter === s ? 600 : 500,
+                        padding: "8px 14px", fontFamily: "Inter, system-ui, sans-serif", fontWeight: 500, fontSize: 12,
+                        border: "none", cursor: "pointer", transition: "background 150ms ease-out",
+                        background: statusFilter === s ? T.accent : T.surface,
+                        color: statusFilter === s ? "#FFFFFF" : T.sub,
                       }}>{s}</button>
                     ))}
                   </div>
                 </div>
               </div>
 
-              {loadingRows ? <EmptyCard text="Loading products…" /> :
-                visibleRows.length === 0 ? <EmptyCard text="No products match this filter." /> : (
-                  <div style={{ border: `1px solid ${T.line}`, borderRadius: 8, overflow: "hidden", background: "#fff" }}>
-                    {visibleRows.map((r, i) => {
-                      const done = (r.Status || "").trim().toLowerCase() === "done";
-                      return (
-                        <div key={i} onClick={() => openProduct(r)} style={{
-                          display: "flex", alignItems: "center", gap: 16, padding: "12px 16px",
-                          borderTop: i ? `1px solid ${T.line}` : "none", cursor: "pointer",
-                        }}
-                          onMouseEnter={(e) => e.currentTarget.style.background = "#F5F5F5"}
-                          onMouseLeave={(e) => e.currentTarget.style.background = "#fff"}>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontWeight: 600 }}>{r.Subheader || <span style={{ color: T.error }}>⚠ No headline in sheet</span>}</div>
-                            <div style={{ fontSize: 11, color: T.disabled, fontFamily: mono, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                              {parseProductUrl(r.URL).item_id || "no item_id (store link)"}
-                            </div>
+              {loadingRows ? (
+                <EmptyCard text="Loading products…" />
+              ) : visibleRows.length === 0 ? (
+                <div style={{ maxWidth: 1040 }}><EmptyCard text="No products match this filter." /></div>
+              ) : (
+                <div style={{ border: `1px solid ${T.line}`, borderRadius: 8, overflow: "hidden", background: T.surface, maxWidth: 1040 }}>
+                  {visibleRows.map((r, i) => {
+                    const done = (r.Status || "").trim().toLowerCase() === "done";
+                    return (
+                      <div key={i} onClick={() => openProduct(r)}
+                        style={{ display: "flex", alignItems: "center", gap: 16, padding: "12px 16px", borderTop: i ? `1px solid ${T.line}` : "none", cursor: "pointer", transition: "background 100ms ease-out" }}
+                        onMouseEnter={(e) => e.currentTarget.style.background = T.surface2}
+                        onMouseLeave={(e) => e.currentTarget.style.background = T.surface}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontFamily: "Inter, system-ui, sans-serif", fontWeight: 600, fontSize: 14, color: T.text }}>
+                            {r.Subheader || <span style={{ color: T.error }}>⚠ No headline in sheet</span>}
                           </div>
-                          <div style={{ fontSize: 12, color: T.sub, width: 90 }}>{r.Date}</div>
-                          <div style={{ fontSize: 14, fontWeight: 600, width: 110, textAlign: "right" }}>
-                            {/^\d/.test(String(r.Discounted).trim()) ? "₹" : ""}{r.Discounted}
+                          <div style={{ fontFamily: mono, fontSize: 11, color: T.sub, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginTop: 2 }}>
+                            {parseProductUrl(r.URL).item_id || "no item_id (store link)"}
                           </div>
-                          <span style={{
-                            fontSize: 11, fontWeight: 600, padding: "3px 8px", borderRadius: 4, width: 58, textAlign: "center",
-                            background: done ? "#111111" : "#F5F5F5",
-                            color: done ? "#FFFFFF" : "#707072",
-                          }}>{done ? "Done" : "Pending"}</span>
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
+                        <div style={{ width: 90, flexShrink: 0, fontFamily: "Inter, system-ui, sans-serif", fontWeight: 400, fontSize: 12, color: T.sub }}>{r.Date}</div>
+                        <div style={{ width: 110, flexShrink: 0, textAlign: "right", fontFamily: "Inter, system-ui, sans-serif", fontWeight: 600, fontSize: 13, color: T.text }}>
+                          {/^\d/.test(String(r.Discounted).trim()) ? "₹" : ""}{r.Discounted}
+                        </div>
+                        <span style={{
+                          width: 58, flexShrink: 0, textAlign: "center",
+                          fontFamily: "Inter, system-ui, sans-serif", fontWeight: 600, fontSize: 11,
+                          textTransform: "uppercase", letterSpacing: "0.02em",
+                          padding: "3px 8px", borderRadius: 4,
+                          background: done ? T.accent : T.work,
+                          color: done ? "#FFFFFF" : T.sub,
+                        }}>{done ? "Done" : "Pending"}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 
-          {/* WORKSPACE (product open) */}
-          {element && active && (
-            <>
+          {/* SCREEN: WORKSPACE */}
+          {screen === "workspace" && (
+            <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, display: "flex", overflow: "hidden" }}>
+
               {/* canvas column */}
-              <div style={{ flex: 1, minWidth: 0, overflow: "auto", padding: 24, display: "flex", flexDirection: "column", alignItems: "center" }}>
-                {buildErr && <div style={{ ...warnBox, marginBottom: 16 }}>{buildErr}</div>}
+              <div style={{ flex: 1, minWidth: 0, overflow: "auto", padding: 32, display: "flex", flexDirection: "column", alignItems: "center" }}>
+                {buildErr && (
+                  <div style={{ ...warnBox, marginBottom: 16, width: "100%", maxWidth: 480 }}>{buildErr}</div>
+                )}
 
                 {/* artboard */}
                 <div style={{
-                  background: "#fff", border: `1px solid ${T.line}`, borderRadius: 0,
-                  padding: 24, backgroundImage: "radial-gradient(#E9E8E4 1px, transparent 1px)", backgroundSize: "12px 12px",
+                  background: T.surface2, border: `1px solid ${T.line}`, borderRadius: 0,
+                  padding: 24,
+                  backgroundImage: "radial-gradient(#2E2E2E 1px, transparent 1px)",
+                  backgroundSize: "12px 12px",
+                  boxShadow: "0 4px 18px rgba(0,0,0,0.60)",
                 }}>
                   <canvas ref={canvasRef} style={{
-                    width: 480, height: 250, display: "block", borderRadius: 16,
-                    boxShadow: "0 4px 18px rgba(0,0,0,0.10)", background: "#F5F5F5",
+                    width: 480, height: 250, display: "block", borderRadius: 0, background: T.work,
                   }} />
-                  <div style={{ textAlign: "center", marginTop: 12, fontSize: 11, color: T.disabled, fontFamily: mono }}>
+                  <div style={{ textAlign: "center", marginTop: 12, fontFamily: mono, fontSize: 11, color: T.sub }}>
                     361 × 188 logical · exports at {cfg.canvas.scale}× ({cfg.canvas.wLogical * cfg.canvas.scale} × {cfg.canvas.hLogical * cfg.canvas.scale})
                   </div>
                 </div>
 
-                {/* upload */}
-                <div style={{ marginTop: 16, display: "flex", gap: 8 }}>
-                  <UploadBtn label={bgImg ? "Replace lifestyle image" : "Upload lifestyle image"}
-                    onFile={(f) => loadImageFile(f, setBgImg)} primary />
-                  <UploadBtn label={logoImg ? "Replace brand logo" : "Upload brand logo"}
-                    onFile={(f) => { setLogoErr(null); loadImageFile(f, setLogoImg); }} />
+                {/* uploads */}
+                <div style={{ marginTop: 16, display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center" }}>
+                  <UploadBtn
+                    label={bgImg ? "Replace lifestyle image" : "Upload lifestyle image"}
+                    onFile={(f) => loadImageFile(f, setBgImg)}
+                    primary
+                  />
+                  <UploadBtn
+                    label={logoImg ? "Replace brand logo" : "Upload brand logo"}
+                    onFile={(f) => { setLogoErr(null); loadImageFile(f, setLogoImg); }}
+                  />
                 </div>
 
                 {logoErr && (
-                  <div style={{ ...warnBox, marginTop: 8, maxWidth: 480 }}>⚠ {logoErr}</div>
+                  <div style={{ ...warnBox, marginTop: 16, width: "100%", maxWidth: 480 }}>⚠ {logoErr}</div>
                 )}
-
                 {warnings.length > 0 && (
-                  <div style={{ ...warnBox, marginTop: 8, maxWidth: 480 }}>
+                  <div style={{ ...warnBox, marginTop: 16, width: "100%", maxWidth: 480 }}>
                     {warnings.map((w, i) => <div key={i}>⚠ {w}</div>)}
                   </div>
                 )}
 
-                {/* approval / export */}
-                <div style={{ marginTop: 24, width: 200 }}>
+                {/* approve / export */}
+                <div style={{ marginTop: 20, width: "100%", maxWidth: 480 }}>
                   {!approved ? (
-                    <div style={{ display: "flex", gap: 20 }}>
-                      <button onClick={() => setApproved(true)} style={btnPrimary}>Approve creative</button>
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+                      <button onClick={() => setApproved(true)} style={btnPrimary}>
+                        Approve creative →
+                      </button>
+                      <span style={{ fontFamily: "Inter, system-ui, sans-serif", fontWeight: 400, fontSize: 11.5, color: T.sub, textAlign: "center", maxWidth: 320 }}>
+                        Edit freely in the panel; approve when it looks right.
+                      </span>
                     </div>
                   ) : (
-                    <div style={{ border: "1px solid #128A09", background: "#F5F5F5", borderRadius: 8, padding: 16 }}>
-                      <div style={{ fontWeight: 600, color: "#128A09", marginBottom: 8 }}>Approved — export</div>
-                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                        {["png", "webp", "jpg"].map((t) => (
-                          <button key={t} onClick={() => exportAs(t)} style={btnExport}>Download .{t}</button>
-                        ))}
-                        <button disabled title="Coming soon" style={btnDisabled}>Upload to CMS · Coming soon</button>
+                    <div style={{ border: `1px solid ${T.success}`, background: "rgba(29,191,18,0.08)", borderRadius: 12, padding: 16 }}>
+                      <div style={{ fontFamily: "Jost, sans-serif", fontWeight: 700, fontSize: 14, color: T.success }}>
+                        Approved — export
                       </div>
-                      <button onClick={() => setApproved(false)} style={{ ...linkBtn, marginTop: 8 }}>← Back to editing</button>
+                      <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        {["png", "webp", "jpg"].map((t) => (
+                          <button key={t} onClick={() => exportAs(t)}
+                            onMouseEnter={(e) => e.currentTarget.style.background = "rgba(29,191,18,0.15)"}
+                            onMouseLeave={(e) => e.currentTarget.style.background = T.surface}
+                            style={{
+                              height: 36, padding: "0 14px", border: `1px solid ${T.success}`, borderRadius: 8,
+                              background: T.surface, color: T.success,
+                              fontFamily: "Inter, system-ui, sans-serif", fontWeight: 600, fontSize: 12.5,
+                              cursor: "pointer", transition: "background 150ms ease-out",
+                            }}>
+                            .{t}
+                          </button>
+                        ))}
+                        <button disabled style={{
+                          height: 36, padding: "0 14px", border: `1px solid ${T.line}`, borderRadius: 8,
+                          background: T.surface2, color: T.disabled,
+                          fontFamily: "Inter, system-ui, sans-serif", fontWeight: 600, fontSize: 12.5,
+                          cursor: "not-allowed",
+                        }}>
+                          Upload to CMS · Coming soon
+                        </button>
+                      </div>
+                      <HoverBtn
+                        style={{ marginTop: 12, fontFamily: "Inter, system-ui, sans-serif", fontWeight: 600, fontSize: 12, color: T.success }}
+                        hoverStyle={{ color: T.accent }}
+                        onClick={() => setApproved(false)}>
+                        ← Back to editing
+                      </HoverBtn>
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* properties panel */}
-              <div style={{ width: 320, flexShrink: 0, borderLeft: `1px solid ${T.line}`, background: "#fff", overflow: "auto", padding: "16px 16px 48px" }}>
-                <div style={{ fontWeight: 700, marginBottom: 4 }}>Elements</div>
-                <div style={{ fontSize: 12, color: T.disabled, marginBottom: 12 }}>
-                  Toggle, edit text, adjust position. Changes preview live and are session-only.
-                </div>
+              {/* properties panel — inline on wide, drawer on narrow */}
+              <PropertiesPanel
+                inline={panelInline}
+                open={drawerOpen}
+                onClose={() => setDrawerOpen(false)}
+                elList={elList}
+                overrides={overrides}
+                data={data}
+                logoImg={logoImg}
+                logoErr={logoErr}
+                openAdj={openAdj}
+                cfg={cfg}
+                onToggleEl={(key, v) => setOv(key, { visible: v })}
+                onFieldChange={setOv}
+                onToggleAdj={(key) => setOpenAdj((o) => ({ ...o, [key]: !o[key] }))}
+                onReset={() => { setOverrides({}); setOpenAdj({}); }}
+              />
 
-                {elList.map(([key, base]) => {
-                  const ov = overrides[key] || {};
-                  const isOn = ov.visible !== undefined ? ov.visible : base.visible;
-                  return (
-                    <div key={key} style={{ border: `1px solid ${T.line}`, borderRadius: 8, marginBottom: 8, overflow: "hidden" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: "#F5F5F5" }}>
-                        <span style={{ fontWeight: 600, fontSize: 12, flex: 1 }}>{base.label}</span>
-                        {base.toggleable && <Toggle on={isOn} onChange={(v) => setOv(key, { visible: v })} />}
-                      </div>
-                      {isOn && (
-                        <div style={{ padding: "8px 12px" }}>
-                          {key === "headline" && (
-                            <Field label="Text" value={ov.content ?? data?.fields.headline ?? ""} onChange={(v) => setOv(key, { content: v })} />
-                          )}
-                          {key === "price" && (<>
-                            <Field label="Selling price" value={ov.selling ?? data?.fields.selling_display ?? ""} onChange={(v) => setOv(key, { selling: v })} />
-                            <Field label="MRP (strikethrough)" value={ov.mrp ?? data?.fields.mrp ?? ""} onChange={(v) => setOv(key, { mrp: v })} mono />
-                          </>)}
-                          {key === "cta_button" && (
-                            <Field label="Button text" value={ov.content ?? base.label_text} onChange={(v) => setOv(key, { content: v })} />
-                          )}
-                          {key === "tnc" && (
-                            <Field label="Text" value={ov.content ?? base.text} onChange={(v) => setOv(key, { content: v })} />
-                          )}
-                          {key === "offer_badge" && (
-                            <Field label="Badge text" value={ov.content ?? data?.fields.offer ?? ""} onChange={(v) => setOv(key, { content: v })} />
-                          )}
-                          {key === "quantity_badge" && (
-                            <Field label="Quantity (e.g. 75 ml)" value={ov.content ?? data?.fields.quantity ?? ""} onChange={(v) => setOv(key, { content: v })} />
-                          )}
-                          {key === "brand_logo" && (
-                            <>
-                              <div style={{ fontSize: 11, color: logoErr ? T.error : T.sub }}>
-                                {logoImg
-                                  ? "Brand logo loaded."
-                                  : logoErr
-                                    ? logoErr
-                                    : data?.fields.brand_logo_url
-                                      ? "Loading brand logo…"
-                                      : "No logo found — upload manually."}
-                              </div>
-                              <div style={{ marginTop: 8 }}>
-                                <div style={{ fontSize: 11, color: T.sub, marginBottom: 4 }}>Logo size</div>
-                                <input
-                                  type="range"
-                                  min={0}
-                                  max={24}
-                                  step={1}
-                                  value={6 - (ov.pad ?? base.pad)}
-                                  onChange={(e) => setOv(key, { pad: 6 - Number(e.target.value) })}
-                                  style={{ width: "100%" }}
-                                />
-                              </div>
-                            </>
-                          )}
+              {/* FAB + scrim on narrow screens */}
+              {!panelInline && !drawerOpen && (
+                <button onClick={() => setDrawerOpen(true)} style={{
+                  position: "fixed", right: 16, bottom: 16, zIndex: 40,
+                  height: 44, padding: "0 28px", borderRadius: 30,
+                  background: T.accent, color: "#FFFFFF", border: "none",
+                  fontFamily: "Inter, system-ui, sans-serif", fontWeight: 500, fontSize: 14,
+                  textTransform: "uppercase", letterSpacing: "0.02em",
+                  boxShadow: T.orangeGlow, cursor: "pointer",
+                }}>Edit</button>
+              )}
+              {!panelInline && drawerOpen && (
+                <div onClick={() => setDrawerOpen(false)} style={{
+                  position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
+                  background: "rgba(0,0,0,0.60)", zIndex: 45,
+                }} />
+              )}
+            </div>
+          )}
 
-                          {/* position adjust */}
-                          <button onClick={() => setOpenAdj((o) => ({ ...o, [key]: !o[key] }))}
-                            style={{ ...linkBtn, marginTop: 4, fontSize: 11 }}>
-                            {openAdj[key] ? "Hide position" : "Adjust position"}
-                          </button>
-                          {openAdj[key] && (
-                            <div style={{ display: "flex", gap: 4, marginTop: 8 }}>
-                              {("cx" in base) ? (<>
-                                <NumField label="cx" value={ov.cx ?? base.cx} onChange={(v) => setOv(key, { cx: v })} />
-                                <NumField label="cy" value={ov.cy ?? base.cy} onChange={(v) => setOv(key, { cy: v })} />
-                                <NumField label="r" value={ov.r ?? base.r} onChange={(v) => setOv(key, { r: v })} />
-                              </>) : (<>
-                                <NumField label="x" value={ov.x ?? base.x} onChange={(v) => setOv(key, { x: v })} />
-                                <NumField label="y" value={ov.y ?? base.y} onChange={(v) => setOv(key, { y: v })} />
-                              </>)}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+          {/* SCREEN: SETTINGS */}
+          {screen === "settings" && (
+            <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, overflow: "auto", padding: 32 }}>
+              <SettingsScreen cfg={cfg} />
+            </div>
+          )}
 
-                <button onClick={() => { setOverrides({}); setOpenAdj({}); }} style={{ ...linkBtn, marginTop: 4 }}>
-                  Reset all edits
-                </button>
+          {/* SCREEN: COMING SOON */}
+          {screen === "soon" && (
+            <div style={{
+              position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
+              display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+              gap: 8, padding: 32, textAlign: "center",
+            }}>
+              <div style={{ fontFamily: "Jost, sans-serif", fontWeight: 900, fontSize: 48, lineHeight: 0.95, letterSpacing: "-0.02em", textTransform: "uppercase", color: T.text }}>
+                {soonCat}
               </div>
-            </>
+              <div style={{ fontFamily: "Inter, system-ui, sans-serif", fontWeight: 400, fontSize: 16, color: T.sub }}>
+                This category is coming soon.
+              </div>
+            </div>
           )}
         </div>
       </main>
+
+      {/* ── mobile bottom nav ─────────────────────────────────────────────────── */}
+      {isMobile && (
+        <nav style={{ flexShrink: 0, height: 56, background: T.ink, display: "flex", overflowX: "auto", borderTop: `1px solid ${T.line}` }}>
+          {CATEGORIES.map((c) => {
+            const isActive = c.id === catId && !showSettings && !soonCat;
+            return (
+              <button key={c.id}
+                onClick={() => {
+                  if (c.enabled) navigate(`/?cat=${c.id}`);
+                  else navigate(`/soon/${encodeURIComponent(c.label)}`);
+                }}
+                style={{ flexShrink: 0, minWidth: 64, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px", border: "none", background: "none", cursor: "pointer" }}>
+                <span style={{ fontFamily: "Jost, sans-serif", fontWeight: 700, fontSize: 9, textTransform: "uppercase", letterSpacing: "0.02em", color: isActive ? T.accent : T.sub }}>
+                  {c.label.slice(0, 5)}
+                </span>
+              </button>
+            );
+          })}
+          <button onClick={openSettings} style={{ flexShrink: 0, minWidth: 64, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px", border: "none", background: "none", cursor: "pointer" }}>
+            <span style={{ fontFamily: "Jost, sans-serif", fontWeight: 700, fontSize: 9, textTransform: "uppercase", letterSpacing: "0.02em", color: showSettings ? T.accent : T.sub }}>
+              Settings
+            </span>
+          </button>
+        </nav>
+      )}
     </div>
   );
 }

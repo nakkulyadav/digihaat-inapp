@@ -5,3 +5,14 @@
   font-style: normal;
   font-display: block;
 }
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: Inter, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+button { font-family: inherit; border: none; background: none; cursor: pointer; color: inherit; }
+input { font-family: inherit; border: none; outline: none; }
+
+body { background: #0F0F0F; color: #F0F0F0; }
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: #2E2E2E; border-radius: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
