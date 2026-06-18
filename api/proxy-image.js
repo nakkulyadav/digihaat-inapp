@@ -1,6 +1,23 @@
-// Vercel serverless function: proxies brand logo images from storage.googleapis.com
-// to avoid canvas taint when drawing cross-origin images onto an HTML5 Canvas.
-// Only requests to *.googleapis.com are forwarded — all others are rejected.
+import dns from "dns";
+const dnsPromises = dns.promises;
+
+const PRIVATE_IP_RE = [
+  /^127\./,
+  /^10\./,
+  /^192\.168\./,
+  /^172\.(1[6-9]|2[0-9]|3[01])\./,
+  /^169\.254\./,
+  /^0\.0\.0\.0/,
+  /^::1$/,
+  /^fc[0-9a-f]{2}:/i,
+  /^fd[0-9a-f]{2}:/i,
+  /^fe80:/i,
+];
+
+function isPrivateIp(ip) {
+  return PRIVATE_IP_RE.some((re) => re.test(ip));
+}
+
 export default async function handler(req, res) {
   const { url } = req.query;
 
@@ -17,8 +34,33 @@ export default async function handler(req, res) {
     return;
   }
 
-  if (!parsed.hostname.endsWith("googleapis.com")) {
-    res.status(403).json({ error: "domain not allowed" });
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    res.status(400).json({ error: "only http and https urls are allowed" });
+    return;
+  }
+
+  // Resolve hostname to IPs and block private/internal ranges (SSRF protection)
+  let ipv4 = [];
+  let ipv6 = [];
+  try {
+    ipv4 = await dnsPromises.resolve4(parsed.hostname);
+  } catch {
+    // hostname may be IPv6-only or unresolvable on IPv4
+  }
+  try {
+    ipv6 = await dnsPromises.resolve6(parsed.hostname);
+  } catch {
+    // hostname may be IPv4-only
+  }
+
+  if (ipv4.length === 0 && ipv6.length === 0) {
+    res.status(502).json({ error: "hostname could not be resolved" });
+    return;
+  }
+
+  const allIps = [...ipv4, ...ipv6];
+  if (allIps.some(isPrivateIp)) {
+    res.status(403).json({ error: "private or internal addresses are not allowed" });
     return;
   }
 
