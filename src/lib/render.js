@@ -96,13 +96,26 @@ export function drawBanner(ctx, cfg, data, ov, assets) {
   }
 
   // headline
+  let headlineLines = 1;
   if (visible("headline")) {
     const e = get("headline");
     ctx.fillStyle = e.color; ctx.font = font(e.weight, e.size);
     ctx.textBaseline = "top"; ctx.textAlign = "left";
-    const lines = wrapLines(ctx, ov.headline?.content ?? data.fields.headline, e.maxW);
+    let lines = wrapLines(ctx, ov.headline?.content ?? data.fields.headline, e.maxW);
+    if (e.maxLines && lines.length > e.maxLines) {
+      lines = lines.slice(0, e.maxLines);
+      let words = lines[lines.length - 1].split(" ");
+      while (words.length > 0) {
+        const candidate = words.join(" ") + "…";
+        if (ctx.measureText(candidate).width <= e.maxW || words.length === 1) {
+          lines[lines.length - 1] = candidate;
+          break;
+        }
+        words.pop();
+      }
+    }
+    headlineLines = lines.length;
     lines.forEach((ln, i) => ctx.fillText(ln, e.x, e.y + i * e.lineHeight));
-    if (lines.length > 2) warnings.push("Headline wraps to 3+ lines — may collide with price.");
     if (!String(ov.headline?.content ?? data.fields.headline).trim())
       warnings.push("Headline is empty.");
   }
@@ -110,7 +123,8 @@ export function drawBanner(ctx, cfg, data, ov, assets) {
   // price
   if (visible("price")) {
     const e = get("price");
-    const baseline = e.y + e.sellingSize;
+    const priceY = headlineLines >= 2 ? e.yMultiline : e.y;
+    const baseline = priceY + e.sellingSize;
     ctx.textBaseline = "alphabetic"; ctx.textAlign = "left";
     const sell = ov.price?.selling ?? data.fields.selling_display;
     const sellTxt = (data.fields.selling_is_numeric ? e.prefix : "") + sell;

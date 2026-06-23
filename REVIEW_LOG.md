@@ -124,3 +124,36 @@
 - No new entries in `package.json`.
 
 **All actionable issues resolved — 2026-06-23** (3 Notes accepted; all low-frequency edge cases or future UX considerations)
+
+---
+## Review: Headline Multiline Cap + Price Y Shift
+**Date:** 2026-06-23
+**Touched files:** `src/config/elements/banner_sku.json`, `src/lib/render.js`
+
+### Findings
+
+#### 🔴 Critical (fix before next feature)
+- None.
+
+#### 🟡 Warning (fix soon, not blocking)
+- None.
+
+#### 🔵 Note (low priority / informational)
+- [render.js:126] — If a future banner config omits `yMultiline` from its `price` element, `priceY` resolves to `undefined`, `baseline` becomes `NaN`, and all price drawing silently fails (canvas ignores NaN coordinates — no error thrown). A one-line guard `e.yMultiline ?? e.y` would make this safe for extension. Only matters when new banner types are added.
+- [render.js:110] — When the last capped line reduces to a single word that still exceeds `maxW`, it renders as `"word…"` regardless of overflow width. The loop exits on `words.length === 1` unconditionally. Not a real-world concern for grocery product headline lengths, but character-level truncation would be needed to fully handle it.
+
+#### ✅ Clean
+- **Security** — No secrets, API keys, or credentials. No user-controlled input flows into eval or raw fetch URLs. `ctx.fillText` is safe.
+- **Architecture** — `maxLines` and `yMultiline` live in config, not in the renderer. `headlineLines` is a local variable scoped to `drawBanner()`; no state leakage. No direct API/sheet reading. Visible/toggleable pattern untouched.
+- **Performance** — Truncation loop calls `ctx.measureText()` per word on the last line only, bounded by word count of a single headline. Negligible at render scale.
+- **Bundle hygiene** — No new npm packages. No new imports. No `import *` patterns. No new font weights.
+- **Code hygiene** — No `console.log` or debug statements. No TODO comments. No hardcoded category names or element names outside config.
+- **Env variables** — No new `VITE_*` references.
+
+### Drift check (full codebase)
+- No new hardcoded pixel values or colors in any render function.
+- No new `import *` patterns in `src/`.
+- No untracked `VITE_*` env variable references.
+- No new entries in `package.json`.
+
+**All actionable issues resolved — 2026-06-23** (2 Notes accepted; both low-frequency edge cases relevant only at future extension time)

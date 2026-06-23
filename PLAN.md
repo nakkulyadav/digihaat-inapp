@@ -318,3 +318,35 @@ Fix MRP extraction to use `raw.mrp` from the catalogue as the primary source (wi
 - [x] 🟩 **Step 3: Add same-price warning in `render.js`**
   - [x] 🟩 In the `price` draw block, after resolving `mrp`, parse it as a float: `const mrpNum = parseFloat(mrp)`
   - [x] 🟩 Compare against `data.fields.selling_numeric`; if both are finite and equal, push to warnings: `"MRP and selling price are the same — edit before exporting."`
+
+---
+
+# Feature Implementation Plan
+
+## TLDR
+When the headline wraps to 2 lines, shift the price block's Y coordinate from its default to a configurable multiline value. Cap the headline at 2 lines and truncate with an ellipsis if text would exceed that. Both the max line count and the shifted Y value live in config.
+
+## Critical Decisions
+- **`maxLines` added to `headline` in `banner_sku.json`** — set to `2`; the renderer reads this and caps line wrapping at that count.
+- **`yMultiline` added to `price` in `banner_sku.json`** — explicit second Y value (`118`) rather than an offset; more readable and consistent with how other Y values are expressed in the config.
+- **Ellipsis truncation on the last line** — if the full text would produce more than `maxLines` lines, the last kept line is trimmed word-by-word until it fits within `maxW` with `"…"` appended.
+- **Only the price block shifts** — no other elements (CTA, T&C, badge) are affected.
+- **Line count determined inside the headline draw block** — stored in a local variable and passed forward to the price draw block within the same `drawBanner()` call.
+
+## Tasks
+
+- [x] 🟩 **Step 1: Update `banner_sku.json`**
+  - [x] 🟩 Add `"maxLines": 2` to the `headline` element
+  - [x] 🟩 Add `"yMultiline": 118` to the `price` element
+
+- [x] 🟩 **Step 2: Update headline draw block in `render.js`**
+  - [x] 🟩 After computing lines via `wrapLines()`, cap the array at `cfg.headline.maxLines`
+  - [x] 🟩 If the original line count exceeded `maxLines`, trim the last kept line word-by-word until it fits within `maxW` with `"…"` appended
+  - [x] 🟩 Store the final rendered line count in a local variable (e.g. `headlineLines`) accessible later in `drawBanner()`
+
+- [x] 🟩 **Step 3: Update price draw block in `render.js`**
+  - [x] 🟩 Read `headlineLines` from the local variable set in Step 2
+  - [x] 🟩 Resolve price Y as: `headlineLines >= 2 ? get("price").yMultiline : get("price").y`
+  - [x] 🟩 Use the resolved Y for all price-block drawing (selling price, MRP strikethrough)
+
+**Executed — 2026-06-23**
