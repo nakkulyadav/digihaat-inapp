@@ -350,3 +350,43 @@ When the headline wraps to 2 lines, shift the price block's Y coordinate from it
   - [x] 🟩 Use the resolved Y for all price-block drawing (selling price, MRP strikethrough)
 
 **Executed — 2026-06-23**
+
+---
+
+# Feature Implementation Plan
+
+## TLDR
+Replace the synthetic mock MRP (a hash-derived multiplier of the discounted price) with the real MRP fetched live from the analytics API — mirroring the existing brand logo fetch pattern. Only MRP is sourced from the API; all other product fields continue to come from the Google Sheet.
+
+## Critical Decisions
+- **New Vercel function `api/catalogue-item.js`, not full live mode** — `DATA_MODE` stays `"mock"`; only MRP is fetched live, same as brand logo. Switching to full live mode would pull item name and provider name from the API too, creating a mixed-source data model inconsistent with the sheet-first design.
+- **`item_unique_id` constructed from URL params** — `${bpp_id}_${domain}_${provider_id}_${item_id}` — all four already parsed by `lib/url.js`; mirrors the `provider_unique_id` pattern used by the logo fetch.
+- **MRP field path: `data[0].mrp`, fallback `data[0].price`** — confirmed against the live analytics API response; both are top-level numeric fields. `mapCatalogueResponse()` already mapped these paths correctly; the bug was purely that mock mode bypassed the live fetch entirely.
+- **Graceful degradation** — if `item_id` is absent (store links) or the fetch fails, `fetchItemMrp()` returns `{ mrp: null, price: null }` and the mock MRP from `cat` is used as the last fallback. No crash, no blank field.
+- **Parallel fetch with logo** — `fetchItemMrp()` runs concurrently with `fetchProviderLogo()` in `assemble.js`; no added latency on the critical path.
+
+## Tasks
+
+- [x] 🟩 **Step 1: Create `api/catalogue-item.js`**
+  - [x] 🟩 Create `api/catalogue-item.js` as a Vercel serverless function
+  - [x] 🟩 Accept query params: `item_id`, `bpp_id`, `domain`, `provider_id`; return `400` if any are missing
+  - [x] 🟩 Construct `item_unique_id = "${bpp_id}_${domain}_${provider_id}_${item_id}"`
+  - [x] 🟩 Fetch `https://prod.digihaat.in/analyticsDashboard/catalog/search?page=1&pageSize=1&item_unique_id={item_unique_id}` server-side
+  - [x] 🟩 Extract `json.data?.[0]?.mrp ?? null` and `json.data?.[0]?.price ?? null` from the response
+  - [x] 🟩 Return `{ mrp, price }` with `Access-Control-Allow-Origin: *` and `Cache-Control: public, max-age=300`
+  - [x] 🟩 Return `502` on upstream fetch failure; `404` if `data` array is empty
+
+- [x] 🟩 **Step 2: Add `fetchItemMrp()` to `src/lib/catalogue.js`**
+  - [x] 🟩 Add `CATALOGUE_ITEM_ENDPOINT` to `src/config/constants.js` (defaults to `/api/catalogue-item`, same-origin on Vercel)
+  - [x] 🟩 Add `fetchItemMrp(bppId, domain, providerId, itemId)` to `catalogue.js`; return `{ mrp: null, price: null }` immediately if `itemId` is empty
+  - [x] 🟩 Call the endpoint with the four params as query string; return `{ mrp: null, price: null }` on any non-OK response or network error
+
+- [x] 🟩 **Step 3: Wire live MRP into `src/lib/assemble.js`**
+  - [x] 🟩 Import `fetchItemMrp` from `catalogue.js`
+  - [x] 🟩 Call `fetchItemMrp(parsed.bpp_id, parsed.domain, parsed.provider_id, parsed.item_id)` in parallel with `fetchProviderLogo()` using `Promise.all`
+  - [x] 🟩 Resolve the `mrp` field as: `liveItem.mrp ?? liveItem.price ?? (cat.mrp != null ? String(cat.mrp) : "")`
+
+- [ ] 🟥 **Step 4: Manual verification**
+  - [ ] 🟥 Test with the original failing URL (`item_id=688877c10434ff411d6f2624`) — confirm MRP matches the catalogue value
+  - [ ] 🟥 Test with a store link (no `item_id`) — confirm banner renders without crashing and MRP falls back gracefully
+  - [ ] 🟥 Test with a product where `mrp` is absent in the API response — confirm `price` fallback is used

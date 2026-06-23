@@ -1,4 +1,4 @@
-import { DATA_MODE, CATALOGUE_ENDPOINT, PROVIDER_LOGO_ENDPOINT } from "../config/constants";
+import { DATA_MODE, CATALOGUE_ENDPOINT, PROVIDER_LOGO_ENDPOINT, CATALOGUE_ITEM_ENDPOINT } from "../config/constants";
 
 // Fetches the provider/brand logo URL via the Vercel serverless proxy,
 // which calls prod.digihaat.in server-side to avoid the browser CORS block.
@@ -60,6 +60,22 @@ export function mockCatalogue(parsed, row) {
     provider_name: row.Subheader ? row.Subheader.split(" ").slice(0, 2).join(" ") : "Brand",
     quantity: null, // no quantity column in sheet; toggle on + type manually
   };
+}
+
+// Fetches the real MRP and price for a specific item from Digihaat's analytics API
+// via the Vercel serverless proxy. Returns { mrp: null, price: null } on any failure
+// or when item_id is absent (store links).
+export async function fetchItemMrp(bppId, domain, providerId, itemId) {
+  if (!itemId) return { mrp: null, price: null };
+  try {
+    const qs = new URLSearchParams({ item_id: itemId, bpp_id: bppId, domain, provider_id: providerId });
+    const res = await fetch(`${CATALOGUE_ITEM_ENDPOINT}?${qs}`);
+    if (!res.ok) return { mrp: null, price: null };
+    const json = await res.json();
+    return { mrp: json?.mrp ?? null, price: json?.price ?? null };
+  } catch {
+    return { mrp: null, price: null };
+  }
 }
 
 // ─── Fetch ────────────────────────────────────────────────────────────────────

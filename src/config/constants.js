@@ -31,3 +31,8 @@ export const IMAGE_PROXY_ENDPOINT = import.meta.env.VITE_IMAGE_PROXY_ENDPOINT ||
 // from Digihaat's analytics API server-side (avoids CORS block on prod.digihaat.in).
 // Defaults to /api/provider-logo (same-origin on Vercel).
 export const PROVIDER_LOGO_ENDPOINT = import.meta.env.VITE_PROVIDER_LOGO_ENDPOINT || "/api/provider-logo";
+
+// Base URL for the Vercel serverless function that fetches item MRP and price
+// from Digihaat's analytics API server-side.
+// Defaults to /api/catalogue-item (same-origin on Vercel).
+export const CATALOGUE_ITEM_ENDPOINT = import.meta.env.VITE_CATALOGUE_ITEM_ENDPOINT || "/api/catalogue-item";
