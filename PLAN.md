@@ -292,3 +292,29 @@ Replace the state-derived `screen` variable with `react-router-dom` URL-based ro
   - [x] 🟩 Walk the full flow in browser: picker → list → workspace — confirm back button at each step
   - [x] 🟩 Confirm settings and soon screens back-navigate correctly
   - [x] 🟩 Hard-refresh on `/workspace` — confirm redirect to `/`
+
+---
+
+# Feature Implementation Plan
+
+## TLDR
+Fix MRP extraction to use `raw.mrp` from the catalogue as the primary source (with `raw.price` as fallback), and warn the user when the extracted MRP equals the sheet's `Discounted Price` so they can correct it before exporting.
+
+## Critical Decisions
+- **`raw.mrp` as primary, `raw.price` as fallback** — the current code reads `raw_source.item_details.price.maximum_value` first, which returns a string (`"250.0"`) and causes display issues; `raw.mrp` is a clean integer at the top level of the catalogue response.
+- **`raw.price` fallback always used, never suppressed** — if `raw.mrp` is absent, the selling price from the catalogue fills the MRP slot; the warning (not a skip) is the safeguard against incorrect output.
+- **Warning in `render.js` warnings array** — the existing `warnings[]` mechanism already surfaces below the banner; no new UI surface needed.
+- **Comparison is sheet `Discounted Price` (numeric) vs extracted MRP (numeric)** — both parsed as floats before comparing; string formatting differences are irrelevant to the equality check.
+
+## Tasks
+
+- [x] 🟩 **Step 1: Fix MRP extraction in `catalogue.js`**
+  - [x] 🟩 In `mapCatalogueResponse()`, change the `mrp` field to: `raw?.mrp ?? raw?.price ?? null`
+  - [x] 🟩 Remove the `rs?.item_details?.price?.maximum_value` path — it is now unused for MRP
+
+- [x] 🟩 **Step 2: Pass numeric selling price through the data pipeline**
+  - [x] 🟩 In `assemble.js`, add `selling_numeric: isFinite(sellingNum) ? sellingNum : null` to `data.fields` — this is the parsed float of the sheet's `Discounted Price`, needed for the MRP equality check in the renderer
+
+- [x] 🟩 **Step 3: Add same-price warning in `render.js`**
+  - [x] 🟩 In the `price` draw block, after resolving `mrp`, parse it as a float: `const mrpNum = parseFloat(mrp)`
+  - [x] 🟩 Compare against `data.fields.selling_numeric`; if both are finite and equal, push to warnings: `"MRP and selling price are the same — edit before exporting."`

@@ -25,7 +25,7 @@ export function mapCatalogueResponse(raw) {
   const rs = raw?.raw_source || {};
   return {
     item_name: raw?.item_name || rs?.item_details?.descriptor?.name || "",
-    mrp: rs?.item_details?.price?.maximum_value ?? raw?.mrp ?? null,
+    mrp: raw?.mrp ?? raw?.price ?? null,
     selling_api: raw?.price ?? rs?.item_details?.price?.value ?? null,
     brand_logo_url:
       rs?.provider_details?.descriptor?.images?.[0] ||

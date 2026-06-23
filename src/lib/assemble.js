@@ -17,6 +17,7 @@ export async function assembleProductData(row, parsed, cat) {
       selling_display: isFinite(sellingNum) && /^\s*\d/.test(sellingRaw) ? String(sellingNum) : sellingRaw,
       selling_is_numeric: isFinite(sellingNum) && /^\s*[\d.]+\s*$/.test(sellingRaw),
       mrp: cat.mrp != null ? String(cat.mrp) : "",
+      selling_numeric: isFinite(sellingNum) ? sellingNum : null,
       offer: row.Offer || "Free Delivery",
       quantity: cat.quantity || "",
       brand_name: cat.provider_name || "",

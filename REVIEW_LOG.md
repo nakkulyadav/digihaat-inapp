@@ -90,3 +90,37 @@
 - No hardcoded pixel values or colors in any render function.
 
 **All actionable issues resolved — 2026-06-18** (Warning 1 / TOCTOU gap deferred by choice ⏸️)
+
+---
+## Review: MRP Extraction Fix
+**Date:** 2026-06-23
+**Touched files:** `src/lib/catalogue.js`, `src/lib/assemble.js`, `src/lib/render.js`
+
+### Findings
+
+#### 🔴 Critical (fix before next feature)
+- None.
+
+#### 🟡 Warning (fix soon, not blocking)
+- None.
+
+#### 🔵 Note (low priority / informational)
+- [assemble.js:8,20] — `selling_numeric` is extracted via `parseFloat(sellingRaw.replace(/[^\d.]/g, ""))` for all rows, including those where `selling_is_numeric` is false (e.g. "Starting at Rs. 50" → `selling_numeric = 50`). If the catalogue MRP is also 50, the warning fires even though the banner displays a string price, not "₹50". The warning message ("MRP and selling price are the same") is technically misleading in this case. Low real-world frequency for grocery SKU banners.
+- [render.js:120-124] — The same-price warning fires on `ov.price.mrp` overrides too, since `mrp` resolves the override first. If a user intentionally sets MRP to match selling price (legitimate no-discount scenario), the warning cannot be dismissed — there is no suppress/acknowledge mechanism. No fix needed now; worth noting if the team finds the warning noisy.
+- [catalogue.js:28-29] — `mrp` and `selling_api` both fall back to `raw.price` when `raw.mrp` is null. In that case both fields carry the same value, and the same-price warning fires correctly. No bug — noting the coupling so it's not a surprise when debugging fallback cases.
+
+#### ✅ Clean
+- **Security** — No new secrets, API keys, or user-controlled input flows. No new fetch calls.
+- **Architecture** — No hardcoded pixel values, colors, or layout numbers. No component reading raw API fields directly. Data flow chain intact.
+- **Performance** — No new render-time blocking operations. `parseFloat` calls are trivially fast.
+- **Bundle hygiene** — No new npm packages. No new imports. No `import *` patterns.
+- **Code hygiene** — No `console.log` or debug statements. No TODO comments. No untracked env variables.
+- **Env variables** — No new `VITE_*` references. All existing variables remain documented in `.env.example`.
+
+### Drift check (full codebase)
+- No new hardcoded pixel values or colors in any render function.
+- No new `import *` patterns in `src/`.
+- No untracked `VITE_*` env variable references.
+- No new entries in `package.json`.
+
+**All actionable issues resolved — 2026-06-23** (3 Notes accepted; all low-frequency edge cases or future UX considerations)

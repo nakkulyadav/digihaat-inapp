@@ -119,6 +119,10 @@ export function drawBanner(ctx, cfg, data, ov, assets) {
     const sellW = ctx.measureText(sellTxt).width;
     const mrp = ov.price?.mrp ?? data.fields.mrp;
     if (mrp) {
+      const mrpNum = parseFloat(mrp);
+      if (isFinite(mrpNum) && mrpNum === data.fields.selling_numeric) {
+        warnings.push("MRP and selling price are the same — edit before exporting.");
+      }
       const mrpTxt = e.prefix + mrp;
       ctx.font = font(e.mrpWeight, e.mrpSize); ctx.fillStyle = e.mrpColor;
       const mx = e.x + sellW + e.mrpGap;
