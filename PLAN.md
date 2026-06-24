@@ -390,3 +390,38 @@ Replace the synthetic mock MRP (a hash-derived multiplier of the discounted pric
   - [ ] 🟥 Test with the original failing URL (`item_id=688877c10434ff411d6f2624`) — confirm MRP matches the catalogue value
   - [ ] 🟥 Test with a store link (no `item_id`) — confirm banner renders without crashing and MRP falls back gracefully
   - [ ] 🟥 Test with a product where `mrp` is absent in the API response — confirm `price` fallback is used
+
+---
+
+# Feature Implementation Plan
+
+## TLDR
+Fix MRP to always show the real value from the analytics API by correcting the proxy query strategy (`provider_unique_id` + scan by `id`), and remove the hash-derived mock MRP so a fake value can never appear as a fallback.
+
+## Critical Decisions
+- **`provider_unique_id` + `id` scan, not `item_unique_id`** — the analytics API has no `item_unique_id` filter param; `provider_unique_id` is the only confirmed filter. The proxy fetches up to 25 items (matching the API's default page size) and finds the target by matching the full `id` field (`bpp_id_domain_provider_id_item_id`).
+- **`pageSize: 25` in the proxy** — sufficient for the current scope; if a provider has more items, the target may not appear. A known limitation; can be increased or paginated later if needed.
+- **Mock MRP removed entirely from `mockCatalogue()`** — the hash-derived MRP is set to `null`; the field is removed from the computation. A fake value can no longer win the fallback.
+- **Fallback chain trimmed in `assemble.js`** — if `liveItem.mrp` and `liveItem.price` are both null (item not found in API), MRP is blank, not fake. Blank is correct; fake is not.
+- **`DATA_MODE` and `mockCatalogue()` itself are not removed** — other fields (item name, provider name) still use mock values. Only the MRP computation is gutted.
+
+## Tasks
+
+- [x] 🟩 **Step 1: Fix `api/catalogue-item.js` — switch to `provider_unique_id` + scan by `id`**
+  - [x] 🟩 Replace the `item_unique_id` query param with `provider_unique_id` constructed as `${bpp_id}_${domain}_${provider_id}`
+  - [x] 🟩 Set `pageSize` to `25` in the query string
+  - [x] 🟩 After fetching, scan `json.data[]` for the item where `item.id === itemUniqueId` (`${bpp_id}_${domain}_${provider_id}_${item_id}`)
+  - [x] 🟩 Extract `mrp` and `price` from the matched item; return `404` if no match is found
+
+- [x] 🟩 **Step 2: Remove hash-derived MRP from `mockCatalogue()` in `src/lib/catalogue.js`**
+  - [x] 🟩 Delete the hash computation block (`h`, `factor`, `mrp` derivation)
+  - [x] 🟩 Set `mrp: null` in the returned mock object
+
+- [x] 🟩 **Step 3: Update fallback chain in `src/lib/assemble.js`**
+  - [x] 🟩 Change MRP resolution to: `liveItem.mrp ?? liveItem.price ?? ""` — remove the `cat.mrp` fallback entirely
+  - [x] 🟩 Confirm that a null/blank MRP renders gracefully (no strikethrough, no `₹` prefix) — existing renderer behaviour already handles this
+
+- [ ] 🟥 **Step 4: Manual verification**
+  - [ ] 🟥 Test with a product URL where `item_id` is present — confirm displayed MRP matches the value in the analytics API response
+  - [ ] 🟥 Test with a store link (no `item_id`) — confirm MRP is blank and banner renders without crashing
+  - [ ] 🟥 Test with a product whose provider has many items — confirm the correct item is matched by `id`, not just `data[0]`

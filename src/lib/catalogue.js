@@ -43,22 +43,16 @@ export function mapCatalogueResponse(raw) {
 // Synthesises brand/MRP/quantity from sheet data so the tool is usable offline.
 // MRP is derived deterministically from the item_id hash so it stays stable across
 // renders. Flip DATA_MODE to 'live' and fill CATALOGUE_ENDPOINT to replace this.
-export function mockCatalogue(parsed, row) {
-  let h = 0;
-  const s = (parsed.item_id || parsed.provider_id || row.Subheader || "x");
-  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+export function mockCatalogue(row) {
   const sellNum = parseFloat(String(row.Discounted).replace(/[^\d.]/g, ""));
-  // 1.40–2.19×: realistic FMCG markup range; hash-derived so MRP is stable across re-renders
-  const factor = 1.4 + ((h % 80) / 100);
-  const mrp = isFinite(sellNum) && sellNum > 0 ? Math.round(sellNum * factor) : null;
   return {
     item_name: row.Subheader || "Product",
-    mrp,
+    mrp: null,
     selling_api: isFinite(sellNum) ? sellNum : null,
-    brand_logo_url: "", // none in mock → placeholder; real API supplies URL
+    brand_logo_url: "",
     item_image_url: "",
     provider_name: row.Subheader ? row.Subheader.split(" ").slice(0, 2).join(" ") : "Brand",
-    quantity: null, // no quantity column in sheet; toggle on + type manually
+    quantity: null,
   };
 }
 
@@ -81,7 +75,7 @@ export async function fetchItemMrp(bppId, domain, providerId, itemId) {
 // ─── Fetch ────────────────────────────────────────────────────────────────────
 export async function fetchCatalogue(parsed, row) {
   if (DATA_MODE === "mock" || !CATALOGUE_ENDPOINT || !parsed.item_id) {
-    return mockCatalogue(parsed, row);
+    return mockCatalogue(row);
   }
   // [SWAP-FOR-LIVE-API] Real call via CORS proxy.
   const qs = new URLSearchParams({

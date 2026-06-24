@@ -14,7 +14,7 @@ export async function assembleProductData(row, parsed, cat) {
     fetchItemMrp(parsed.bpp_id, parsed.domain, parsed.provider_id, parsed.item_id),
   ]);
 
-  const mrp = liveItem.mrp ?? liveItem.price ?? (cat.mrp != null ? String(cat.mrp) : "");
+  const mrp = liveItem.mrp != null ? String(liveItem.mrp) : liveItem.price != null ? String(liveItem.price) : "";
 
   return {
     meta: { date: row.Date, type: row.Type, category: "grocery", url: row.URL, parsed },

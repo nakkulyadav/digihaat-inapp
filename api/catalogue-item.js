@@ -12,8 +12,9 @@ export default async function handler(req, res) {
     return;
   }
 
+  const providerUniqueId = `${bpp_id}_${domain}_${provider_id}`;
   const itemUniqueId = `${bpp_id}_${domain}_${provider_id}_${item_id}`;
-  const qs = new URLSearchParams({ page: "1", pageSize: "1", item_unique_id: itemUniqueId });
+  const qs = new URLSearchParams({ page: "1", pageSize: "100", provider_unique_id: providerUniqueId });
 
   let upstream;
   try {
@@ -29,7 +30,7 @@ export default async function handler(req, res) {
   }
 
   const json = await upstream.json();
-  const item = json?.data?.[0];
+  const item = (json?.data || []).find((d) => d.id === itemUniqueId);
 
   if (!item) {
     res.status(404).json({ error: "item not found" });
