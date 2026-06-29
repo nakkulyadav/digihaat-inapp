@@ -22,14 +22,19 @@ function font(weight, size) {
 }
 
 function wrapLines(ctx, text, maxW) {
-  const words = String(text).split(/\s+/).filter(Boolean);
-  const lines = []; let line = "";
-  for (const w of words) {
-    const test = line ? line + " " + w : w;
-    if (ctx.measureText(test).width > maxW && line) { lines.push(line); line = w; }
-    else line = test;
+  const segments = String(text).split("\n");
+  const lines = [];
+  for (const seg of segments) {
+    const words = seg.split(/\s+/).filter(Boolean);
+    if (!words.length) { lines.push(""); continue; }
+    let line = "";
+    for (const w of words) {
+      const test = line ? line + " " + w : w;
+      if (ctx.measureText(test).width > maxW && line) { lines.push(line); line = w; }
+      else line = test;
+    }
+    if (line) lines.push(line);
   }
-  if (line) lines.push(line);
   return lines;
 }
 

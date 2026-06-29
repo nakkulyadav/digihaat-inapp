@@ -136,7 +136,47 @@ function PropertiesPanel({ inline, open, onClose, elList, overrides, data, logoI
             {isOn && (
               <div style={{ padding: "10px 12px" }}>
                 {key === "headline" && (
-                  <Field label="Text" value={ov.content ?? data?.fields.headline ?? ""} onChange={(v) => onFieldChange(key, { content: v })} />
+                  <label style={{ display: "block", marginBottom: 8 }}>
+                    <span style={{ fontSize: 11, fontWeight: 500, color: T.sub, display: "block", marginBottom: 4 }}>Text</span>
+                    <textarea
+                      value={ov.content ?? data?.fields.headline ?? ""}
+                      rows={2}
+                      onChange={(e) => onFieldChange(key, { content: e.target.value })}
+                      onKeyDown={(e) => {
+                        if (e.key !== "Enter") return;
+                        if (e.ctrlKey || e.altKey || e.metaKey) return;
+                        e.preventDefault();
+                        if (e.shiftKey) {
+                          const current = ov.content ?? data?.fields.headline ?? "";
+                          if (current.includes("\n")) return;
+                          const cursor = e.target.selectionStart;
+                          let before = current.slice(0, cursor);
+                          const after = current.slice(cursor);
+                          const hlCfg = BANNER_SKU_CONFIG.elements.headline;
+                          const maxW = hlCfg.maxW;
+                          const fontStr = `${hlCfg.weight} ${hlCfg.size}px Inter, system-ui, sans-serif`;
+                          const offscreen = document.createElement("canvas");
+                          const octx = offscreen.getContext("2d");
+                          octx.font = fontStr;
+                          if (octx.measureText(before).width > maxW) {
+                            const words = before.split(/\s+/);
+                            while (words.length > 1 && octx.measureText(words.join(" ") + "…").width > maxW) words.pop();
+                            before = words.join(" ") + "…";
+                          }
+                          onFieldChange(key, { content: before + "\n" + after });
+                        } else {
+                          e.target.blur();
+                        }
+                      }}
+                      onFocus={(e) => { e.target.style.border = `1px solid ${T.accent}`; e.target.style.boxShadow = T.orangeGlow; }}
+                      onBlur={(e) => { e.target.style.border = `1px solid ${T.line}`; e.target.style.boxShadow = "none"; }}
+                      style={{
+                        width: "100%", boxSizing: "border-box", padding: "7px 9px", fontSize: 13,
+                        border: `1px solid ${T.line}`, borderRadius: 7, background: T.surface,
+                        color: T.text, fontFamily: "inherit", resize: "none", lineHeight: 1.5, display: "block",
+                      }}
+                    />
+                  </label>
                 )}
                 {key === "price" && (<>
                   <Field label="Selling price" value={ov.selling ?? data?.fields.selling_display ?? ""} onChange={(v) => onFieldChange(key, { selling: v })} />

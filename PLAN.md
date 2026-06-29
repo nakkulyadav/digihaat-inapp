@@ -421,7 +421,43 @@ Fix MRP to always show the real value from the analytics API by correcting the p
   - [x] 🟩 Change MRP resolution to: `liveItem.mrp ?? liveItem.price ?? ""` — remove the `cat.mrp` fallback entirely
   - [x] 🟩 Confirm that a null/blank MRP renders gracefully (no strikethrough, no `₹` prefix) — existing renderer behaviour already handles this
 
-- [ ] 🟥 **Step 4: Manual verification**
-  - [ ] 🟥 Test with a product URL where `item_id` is present — confirm displayed MRP matches the value in the analytics API response
-  - [ ] 🟥 Test with a store link (no `item_id`) — confirm MRP is blank and banner renders without crashing
-  - [ ] 🟥 Test with a product whose provider has many items — confirm the correct item is matched by `id`, not just `data[0]`
+- [x] 🟩 **Step 4: Manual verification**
+  - [x] 🟩 Test with a product URL where `item_id` is present — confirm displayed MRP matches the value in the analytics API response
+  - [x] 🟩 Test with a store link (no `item_id`) — confirm MRP is blank and banner renders without crashing
+  - [x] 🟩 Test with a product whose provider has many items — confirm the correct item is matched by `id`, not just `data[0]`
+
+---
+
+# Feature Implementation Plan
+
+## TLDR
+Allow the user to insert a manual line break in the headline from the edit panel by pressing Enter at any cursor position. The headline textarea becomes visually multi-line; a `\n` is stored in the string and respected by the renderer. Total visual lines are always capped at 2 — if the segment before the break is long enough to natural-wrap, it is truncated to fit one line before the break is applied.
+
+## Critical Decisions
+- **`\n` stored in the headline string** — no data model change; the existing `ov.headline.content` string accepts `\n` and the renderer splits on it before word-wrapping. Clean and reversible.
+- **`<textarea>` replaces `<input>` for the headline field only** — visually shows both lines while editing; consistent with user expectation when pressing Enter.
+- **Truncation on Enter, not at render time** — when Enter is pressed, the segment before the cursor is checked; if it would naturally wrap, it is trimmed word-by-word (with `…`) to fit exactly one canvas line (`maxW: 200px`, `size: 16px`). This prevents the 3-line scenario at the source.
+- **`wrapLines()` updated to split on `\n` first** — each segment is word-wrapped independently; lines are then concatenated and the `maxLines` cap is applied as before. No change to config.
+- **Price block positioning unchanged** — `headlineLines >= 2` already triggers `yMultiline`; a manual break sets `headlineLines` to 2, which flows through the existing logic automatically.
+
+## Tasks
+
+- [x] 🟩 **Step 1: Update `wrapLines()` in `render.js` to respect `\n`**
+  - [x] 🟩 Split the input string by `\n` into segments before word-wrapping
+  - [x] 🟩 Word-wrap each segment independently using the existing `maxW` logic
+  - [x] 🟩 Concatenate all resulting lines; the existing `maxLines` cap and ellipsis truncation apply unchanged
+
+- [x] 🟩 **Step 2: Replace the headline `Field` with a `<textarea>` in `BannerTool.jsx`**
+  - [x] 🟩 Swap the `<Field>` component for a `<textarea>` scoped to the headline property block only
+  - [x] 🟩 Style it to match the existing `Field` appearance (font, border, padding); 2-row height
+  - [x] 🟩 Wire `value` and `onChange` identically to the current `Field` binding (`ov.content ?? data.fields.headline`)
+
+- [x] 🟩 **Step 3: Intercept Enter key in the textarea**
+  - [x] 🟩 Add an `onKeyDown` handler to the headline textarea
+  - [x] 🟩 On `Enter` (without modifier keys): prevent the default newline insertion
+  - [x] 🟩 If the current value already contains a `\n`, do nothing (already 2 lines — no-op)
+  - [x] 🟩 Otherwise: split the string at the cursor position into `before` and `after`
+  - [x] 🟩 Measure `before` against `maxW` (200px) at the headline font (`600 16px Inter`) using an offscreen canvas; if it wraps (would produce > 1 line), trim `before` word-by-word with `…` until it fits one line
+  - [x] 🟩 Reassemble as `before + "\n" + after` and write back to the override via `onFieldChange`
+
+---

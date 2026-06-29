@@ -157,3 +157,34 @@
 - No new entries in `package.json`.
 
 **All actionable issues resolved — 2026-06-23** (2 Notes accepted; both low-frequency edge cases relevant only at future extension time)
+
+---
+## Review: Manual Headline Line Breaks
+**Date:** 2026-06-29
+**Touched files:** `src/lib/render.js`, `src/components/BannerTool.jsx`
+
+### Findings
+
+#### 🔴 Critical (fix before next feature)
+- None.
+
+#### 🟡 Warning (fix soon, not blocking)
+- ✅ [BannerTool.jsx:146] — Enter handler does not check modifier keys. Resolved: Shift+Enter now inserts the line break; plain Enter saves and blurs; Ctrl/Alt/Meta+Enter are ignored. — fixed 2026-06-29
+
+#### 🔵 Note (low priority / informational)
+- [BannerTool.jsx:155] — `fontStr` in the Enter handler manually duplicates the `font()` helper string from `render.js` (`"${weight} ${size}px Inter, system-ui, sans-serif"`). `font()` is unexported so duplication was forced. If the font fallback stack ever changes, it must be updated in two places.
+- [render.js:29] — An empty segment (cursor at position 0, Enter pressed) pushes `""` as a line, consuming one of the two available slots and rendering blank vertical space on the canvas. Current guard is `if (!words.length) { lines.push(""); continue; }` — changing it to `continue` (no push) would silently drop the blank line. No crash either way; noting for awareness.
+
+#### ✅ Clean
+- **Security** — No secrets, API keys, or credentials. No user-controlled input flows into eval or raw fetch URLs. `ctx.fillText` is safe; offscreen canvas used only for measurement.
+- **Architecture** — No hardcoded pixel values or colors in the renderer. Config values (`maxW`, `weight`, `size`) are read from `BANNER_SKU_CONFIG.elements.headline` at handler time, not hardcoded. Price block Y-switching (`yMultiline`) is handled by the existing `headlineLines >= 2` logic — no change required.
+- **Performance** — Offscreen canvas is created on Enter keypress only (a rare user action), not on every keystroke. No change to the onChange→redraw path.
+- **Bundle hygiene** — No new npm packages. No new imports. No `import *` patterns. No new font weights.
+- **Env variables** — No new `VITE_*` references.
+- **Code hygiene** — No `console.log` or debug statements. No TODO comments. No hardcoded category or element names outside config.
+
+### Drift check (full codebase)
+- No new hardcoded pixel values or colors in any render function.
+- No new `import *` patterns in `src/`.
+- No untracked `VITE_*` env variable references.
+- No new entries in `package.json`.
