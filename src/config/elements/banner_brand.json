@@ -84,7 +84,7 @@
     "offer_badge": {
       "label": "Offer badge",
       "order": 6,
-      "visible": true,
+      "visible": false,
       "toggleable": true,
       "x": 283,
       "y": 0,
