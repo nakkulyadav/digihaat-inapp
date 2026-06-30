@@ -461,3 +461,52 @@ Allow the user to insert a manual line break in the headline from the edit panel
   - [x] 🟩 Reassemble as `before + "\n" + after` and write back to the override via `onFieldChange`
 
 ---
+
+# Feature Implementation Plan
+
+## TLDR
+Add support for BRAND-type banners: same canvas layout as SKU but with a Header + Subheader text pair (both from the Google Sheet), no price block, no product image, and the brand logo auto-fetched from the catalogue API's `provider_details.descriptor.images[0]` field using the store URL's provider params.
+
+## Critical Decisions
+- **Separate `banner_brand.json` config** — BRAND is a distinct layout, not a variant of SKU. A separate config file is consistent with the documented pattern for new element types and avoids conditional logic inside `banner_sku.json`.
+- **Header and Subheader are new config elements, not repurposed SKU elements** — they sit at y:67 and y:98 respectively with distinct font styles; neither maps 1:1 to SKU's `headline`.
+- **No price element in `banner_brand.json`** — the element is simply absent from the config; the renderer's existing pattern (draw block only runs if element is in config) handles the omission cleanly.
+- **No product image for BRAND** — confirmed out of scope; the image slot is blank canvas area.
+- **Brand logo fetched via existing `fetchProviderLogo()`** — BRAND store URLs carry `bpp_id`, `domain`, and `provider_id`, which are the exact params `fetchProviderLogo()` already uses. No change to `catalogue.js` needed.
+- **Logo drawn directly, same as SKU** — canvas taint risk accepted; fix deferred to when the image proxy is extended.
+- **Config loaded per row type** — when opening a product row, `BannerTool.jsx` checks `row.Type` (`"SKU"` or `"BRAND"`) and loads the corresponding config. No change to the category/element picker.
+
+## Tasks
+
+- [x] 🟩 **Step 1: Create `config/elements/banner_brand.json`**
+  - [x] 🟩 Copy canvas block from `banner_sku.json` (same dimensions: 361×188, 2× scale, radius:12)
+  - [x] 🟩 Add `header` element: `label:"Header"`, `order:2`, `visible:true`, `toggleable:false`, `x:16`, `y:67`, `fontSize:14`, `fontWeight:500`, `color:"#000000"`, `maxW:167`, `lineHeight:22`, `maxLines:1`
+  - [x] 🟩 Add `subheader` element: `label:"Subheader"`, `order:3`, `visible:true`, `toggleable:false`, `x:16`, `y:98`, `fontSize:18`, `fontWeight:700`, `color:"#000000"`, `maxW:167`, `lineHeight:18`, `maxLines:1`
+  - [x] 🟩 Include `brand_logo`, `cta_button`, `tnc`, `offer_badge`, `quantity_badge` elements with identical values to `banner_sku.json`
+  - [x] 🟩 Omit `headline`, `price`, and product image elements entirely
+
+- [x] 🟩 **Step 2: Add draw blocks for `header` and `subheader` in `render.js`**
+  - [x] 🟩 Add `header` and `subheader` fields to `assemble.js` (`data.fields.header = row.Header`, `data.fields.subheader = row.Subheader`)
+  - [x] 🟩 Add draw block for `header`: read `data.fields.header` as the text source; apply config font/position values; use `wrapLines()` with the element's `maxW`
+  - [x] 🟩 Add draw block for `subheader`: read `data.fields.subheader` as the text source; draw only if value is non-empty (mirrors existing empty-subheader guard)
+  - [x] 🟩 Both blocks must read all values exclusively from config (no hardcoded pixels)
+
+- [x] 🟩 **Step 3: Load config by row type in `BannerTool.jsx`**
+  - [x] 🟩 Import `banner_brand.json` alongside the existing `banner_sku.json` import
+  - [x] 🟩 When opening a product row (`openProduct` or equivalent), resolve config as: `row.Type === "BRAND" ? brandCfg : skuCfg`
+  - [x] 🟩 Pass the resolved config into the workspace state so the renderer and properties panel both receive the correct config
+
+- [x] 🟩 **Step 4: Update properties panel in `BannerTool.jsx`**
+  - [x] 🟩 Add an edit block for `header`: text override field, labeled "Header", bound to `ov.header.content`
+  - [x] 🟩 Add an edit block for `subheader`: text override field, labeled "Subheader", bound to `ov.subheader.content`
+  - [x] 🟩 Hide the price edit block when the active config is `banner_brand.json` (check for absence of `price` key in config)
+  - [x] 🟩 Hide the headline edit block when the active config is `banner_brand.json`
+
+- [ ] 🟥 **Step 5: Manual verification**
+  - [ ] 🟥 Open a BRAND row from the sheet — confirm Header and Subheader text renders at the correct positions with correct font styles
+  - [ ] 🟥 Confirm brand logo loads from the catalogue API using the store URL params
+  - [ ] 🟥 Confirm no price block appears on the canvas
+  - [ ] 🟥 Confirm SKU rows are unaffected (regression check)
+  - [ ] 🟥 Attempt PNG export — note whether canvas taint blocks it; log outcome
+
+---

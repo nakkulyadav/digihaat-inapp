@@ -3,6 +3,7 @@ import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
 
 import { CATEGORIES, ELEMENTS_BY_CATEGORY } from "../config/categories";
 import BANNER_SKU_CONFIG from "../config/elements/banner_sku.json";
+import BANNER_BRAND_CONFIG from "../config/elements/banner_brand.json";
 import { DATA_MODE, IMAGE_PROXY_ENDPOINT } from "../config/constants";
 import { fetchSheet, SAMPLE_ROWS } from "../lib/sheet";
 import { parseProductUrl } from "../lib/url";
@@ -178,6 +179,12 @@ function PropertiesPanel({ inline, open, onClose, elList, overrides, data, logoI
                     />
                   </label>
                 )}
+                {key === "header" && (
+                  <Field label="Header" value={ov.content ?? data?.fields.header ?? ""} onChange={(v) => onFieldChange(key, { content: v })} />
+                )}
+                {key === "subheader" && (
+                  <Field label="Subheader" value={ov.content ?? data?.fields.subheader ?? ""} onChange={(v) => onFieldChange(key, { content: v })} />
+                )}
                 {key === "price" && (<>
                   <Field label="Selling price" value={ov.selling ?? data?.fields.selling_display ?? ""} onChange={(v) => onFieldChange(key, { selling: v })} />
                   <Field label="MRP (strikethrough)" value={ov.mrp ?? data?.fields.mrp ?? ""} onChange={(v) => onFieldChange(key, { mrp: v })} mono />
@@ -324,7 +331,7 @@ export default function BannerTool() {
   const [logoImg, setLogoImg] = useState(null);
   const [logoErr, setLogoErr] = useState(null);
   const [approved, setApproved] = useState(false);
-  const [cfg] = useState(BANNER_SKU_CONFIG); // [SWAP-FOR-LOCALSTORAGE] persist Settings here
+  const [cfg, setCfg] = useState(BANNER_SKU_CONFIG); // [SWAP-FOR-LOCALSTORAGE] persist Settings here
   const [warnings, setWarnings] = useState([]);
   const [openAdj, setOpenAdj] = useState({});
 
@@ -411,6 +418,7 @@ export default function BannerTool() {
   }, [rows, statusFilter, search]);
 
   const openProduct = useCallback(async (row) => {
+    setCfg(row.Type === "BRAND" ? BANNER_BRAND_CONFIG : BANNER_SKU_CONFIG);
     setActive(row); setApproved(false); setOverrides({}); setBgImg(null);
     setLogoImg(null); setLogoErr(null); setData(null); setBuildErr(""); setOpenAdj({});
     setDrawerOpen(false);

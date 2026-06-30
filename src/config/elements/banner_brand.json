@@ -1,5 +1,5 @@
 {
-  "_comment": "Layout rules for the SKU banner (361×188 logical px, exported at 2×). All coordinates are logical px. To add a new element: add an entry here and a matching draw block in /lib/render.js.",
+  "_comment": "Layout rules for the BRAND banner (361×188 logical px, exported at 2×). All coordinates are logical px. Same canvas as banner_sku.json but with header+subheader instead of headline+price.",
   "canvas": {
     "wLogical": 361,
     "hLogical": 188,
@@ -25,36 +25,33 @@
       "pad": 6,
       "placeholderTextColor": "#8D8D8F"
     },
-    "headline": {
-      "label": "Headline",
+    "header": {
+      "label": "Header",
       "order": 2,
       "visible": true,
-      "toggleable": true,
+      "toggleable": false,
       "x": 16,
-      "y": 75,
+      "y": 73,
       "maxW": 167,
-      "maxLines": 2,
-      "weight": 600,
-      "size": 16,
+      "maxLines": 1,
+      "weight": 500,
+      "size": 14,
       "lineHeight": 22,
-      "color": "#1A1A1A"
+      "color": "#000000"
     },
-    "price": {
-      "label": "Price",
+    "subheader": {
+      "label": "Subheader",
       "order": 3,
       "visible": true,
-      "toggleable": true,
+      "toggleable": false,
       "x": 16,
       "y": 98,
-      "yMultiline": 118,
-      "sellingWeight": 700,
-      "sellingSize": 18,
-      "sellingColor": "#1A1A1A",
-      "prefix": "₹",
-      "mrpWeight": 500,
-      "mrpSize": 14,
-      "mrpColor": "#1A1A1A",
-      "mrpGap": 4
+      "maxW": 167,
+      "maxLines": 1,
+      "weight": 700,
+      "size": 18,
+      "lineHeight": 18,
+      "color": "#000000"
     },
     "cta_button": {
       "label": "CTA button",
@@ -79,8 +76,8 @@
       "toggleable": true,
       "x": 16,
       "gapBelowCta": 3,
-      "weight": 400,
-      "size": 6,
+      "weight": 600,
+      "size": 7,
       "color": "#1A1A1A",
       "text": "*T&C apply"
     },

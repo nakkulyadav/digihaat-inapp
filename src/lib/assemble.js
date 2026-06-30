@@ -20,6 +20,8 @@ export async function assembleProductData(row, parsed, cat) {
     meta: { date: row.Date, type: row.Type, category: "grocery", url: row.URL, parsed },
     fields: {
       headline: row.Subheader || cat.item_name || "",
+      header: row.Header || "",
+      subheader: row.Subheader || "",
       selling_display: isFinite(sellingNum) && /^\s*\d/.test(sellingRaw) ? String(sellingNum) : sellingRaw,
       selling_is_numeric: isFinite(sellingNum) && /^\s*[\d.]+\s*$/.test(sellingRaw),
       mrp: mrp !== "" ? String(mrp) : "",

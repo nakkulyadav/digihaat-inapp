@@ -93,7 +93,6 @@ export function drawBanner(ctx, cfg, data, ov, assets) {
       ctx.fillStyle = e.placeholderTextColor; ctx.font = font(700, 8);
       ctx.textAlign = "center"; ctx.textBaseline = "middle";
       const nm = ("Upload Brand\nLogo");
-      const lines = wrapLines(ctx, nm, e.maxW);
       ctx.fillText(nm.length > 20 ? nm.slice(0, 20) : nm, e.x + e.boxW / 2, e.y + e.boxH / 2);
       ctx.textAlign = "left";
     }
@@ -123,6 +122,47 @@ export function drawBanner(ctx, cfg, data, ov, assets) {
     lines.forEach((ln, i) => ctx.fillText(ln, e.x, e.y + i * e.lineHeight));
     if (!String(ov.headline?.content ?? data.fields.headline).trim())
       warnings.push("Headline is empty.");
+  }
+
+  // header (BRAND banners)
+  if (visible("header")) {
+    const e = get("header");
+    ctx.fillStyle = e.color; ctx.font = font(e.weight, e.size);
+    ctx.textBaseline = "top"; ctx.textAlign = "left";
+    let lines = wrapLines(ctx, ov.header?.content ?? data.fields.header, e.maxW);
+    if (e.maxLines && lines.length > e.maxLines) {
+      lines = lines.slice(0, e.maxLines);
+      let words = lines[lines.length - 1].split(" ");
+      while (words.length > 0) {
+        const candidate = words.join(" ") + "…";
+        if (ctx.measureText(candidate).width <= e.maxW || words.length === 1) { lines[lines.length - 1] = candidate; break; }
+        words.pop();
+      }
+    }
+    lines.forEach((ln, i) => ctx.fillText(ln, e.x, e.y + i * e.lineHeight));
+    if (!String(ov.header?.content ?? data.fields.header).trim())
+      warnings.push("Header is empty.");
+  }
+
+  // subheader (BRAND banners)
+  if (visible("subheader")) {
+    const e = get("subheader");
+    const txt = ov.subheader?.content ?? data.fields.subheader;
+    if (txt && String(txt).trim()) {
+      ctx.fillStyle = e.color; ctx.font = font(e.weight, e.size);
+      ctx.textBaseline = "top"; ctx.textAlign = "left";
+      let lines = wrapLines(ctx, txt, e.maxW);
+      if (e.maxLines && lines.length > e.maxLines) {
+        lines = lines.slice(0, e.maxLines);
+        let words = lines[lines.length - 1].split(" ");
+        while (words.length > 0) {
+          const candidate = words.join(" ") + "…";
+          if (ctx.measureText(candidate).width <= e.maxW || words.length === 1) { lines[lines.length - 1] = candidate; break; }
+          words.pop();
+        }
+      }
+      lines.forEach((ln, i) => ctx.fillText(ln, e.x, e.y + i * e.lineHeight));
+    }
   }
 
   // price
